@@ -35,6 +35,7 @@ import itertools
 import json
 import multiprocessing
 import os
+from pyarrow.parquet import ParquetDataset
 import sys
 import threading
 import time
@@ -222,17 +223,38 @@ def get_args():
 
     return args
 
-def fill_simple_queue(filename, simple_queue, chunk_size:int):
+def fill_simple_queue(filename, simple_queue, chunk_size: int):
     # TODO: Assess if instead we could feed pointers which process can then load.
-    with open(filename, "r") as f:
+    if os.path.isdir(filename):
+
+        parquet_dataset_reader = (
+            ParquetDataset(
+                path_or_paths=filename,
+                memory_map=True
+            )
+            .read()
+            .to_reader(max_chunksize=chunk_size)
+        )
+
         print("Start filling queue", flush=True)
-        while True:
-            acc = tuple(itertools.islice(f, chunk_size))
-            if len(acc) == 0:
-                simple_queue.put(None)
-                print(f"Finished reading input file", flush=True)
-                return
-            simple_queue.put(acc)
+
+        for batch in parquet_dataset_reader:
+            batch = tuple(
+                json.dumps(item) for item in batch.to_pylist()
+            )
+            simple_queue.put(batch)
+
+        print("Finished reading input file", flush=True)
+    else:
+        with open(filename, "r") as f:
+            print("Start filling queue", flush=True)
+            while True:
+                acc = tuple(itertools.islice(f, chunk_size))
+                if len(acc) == 0:
+                    simple_queue.put(None)
+                    print(f"Finished reading input file", flush=True)
+                    return
+                simple_queue.put(acc)
 
 def log(readers, log_interval):
     print("Start Logging", flush=True)
