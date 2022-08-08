@@ -47,7 +47,9 @@ def req_file(filename):
     return [x.strip() for x in content]
 
 
-install_requires = req_file("requirements.txt")
+install_requires = req_file(
+    "requirements.txt"
+)  # TODO add requirements dev, change directory, do not read commented out lines
 
 setuptools.setup(
     name=__package_name__,
@@ -65,27 +67,27 @@ setuptools.setup(
     # The licence under which the project is released
     license=__license__,
     classifiers=[
-        'Intended Audience :: Developers',
-        'Intended Audience :: Science/Research',
-        'Intended Audience :: Information Technology',
+        "Intended Audience :: Developers",
+        "Intended Audience :: Science/Research",
+        "Intended Audience :: Information Technology",
         # Indicate what your project relates to
-        'Topic :: Scientific/Engineering :: Artificial Intelligence',
-        'Topic :: Software Development :: Libraries :: Python Modules',
+        "Topic :: Scientific/Engineering :: Artificial Intelligence",
+        "Topic :: Software Development :: Libraries :: Python Modules",
         # Supported python versions
-        'Programming Language :: Python :: 3.6',
-        'Programming Language :: Python :: 3.7',
-        'Programming Language :: Python :: 3.8',
+        "Programming Language :: Python :: 3.6",
+        "Programming Language :: Python :: 3.7",
+        "Programming Language :: Python :: 3.8",
         # Additional Setting
-        'Environment :: Console',
-        'Natural Language :: English',
-        'Operating System :: OS Independent',
+        "Environment :: Console",
+        "Natural Language :: English",
+        "Operating System :: OS Independent",
     ],
-    python_requires='>=3.6',
+    python_requires=">=3.6",
     packages=setuptools.find_packages(),
     install_requires=install_requires,
     # Add in any packaged data.
     include_package_data=True,
     zip_safe=False,
     # PyPI package information.
-    keywords=__keywords__
+    keywords=__keywords__,
 )

@@ -16,9 +16,13 @@ Here is doc with just [instructions to going from 0 to training really fast](sta
 
 1. Install `bigscience-workshop/Megatron-DeepSpeed`
 ```
-git clone https://github.com/bigscience-workshop/Megatron-DeepSpeed
-cd Megatron-DeepSpeed
-pip install -r requirements.txt
+conda create -n open-gptx-bigscience python=3.9
+conda activate open-gptx-bigscience
+conda install pytorch==1.12.1 cudatoolkit=11.3 -c pytorch
+git clone https://github.com/OpenGPTX/bigscience_megatron_deepspeed
+cd bigscience_megatron_deepspeed
+pip install -r requirements/requirements.txt
+pip install -r requirements/requirements_dev.txt
 ```
 
 You can now use this repo directly by working directly from it. You don't need to install it unless you write your own scripts elsewhere that use the modules in this repo, in which case you may want to do:
@@ -55,6 +59,14 @@ adjust `TORCH_CUDA_ARCH_LIST="7.0"` to the architecture of your NVIDIA GPU (or j
 
 The first time you run the training scripts several CUDA kernels will be compiled. Which means you need to have a cuda environment set up in your environment and it should match the version pytorch was built with.
 
+# Update requirements
+
+- Add requirements to the respective *.in file in requirements/
+- run pip-compile-multi to compile requirements
+
+```
+pip-compile-multi --autoresolve
+```
 
 # Usage
 

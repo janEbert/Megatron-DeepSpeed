@@ -1,0 +1,6 @@
+# Please import every other .in file here using `-r filename.in`
+# so that pip-compile-multi can autoresolve everything at once
+# and set global package constraints
+
+-r requirements.in
+-r requirements_dev.in
