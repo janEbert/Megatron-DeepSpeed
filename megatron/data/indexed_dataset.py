@@ -513,7 +513,7 @@ class MMapIndexedDataset(torch.utils.data.Dataset):
         return self._path
 
     def __setstate__(self, state):
-        self._do_init(state)
+        self._do_init(state, skip_warmup=True)
 
     def _do_init(self, path, skip_warmup):
         self._path = path
@@ -1050,7 +1050,7 @@ def gather_files_dist(filemain, filelist, distctx):
     In particular, the input files specified by the calling process may be in storage
     that only the calling process can access, like /dev/shm or a node-local SSD.
     The output file in filemain should be in a location that is writable by all processes.
-    
+
     NOTE: This uses parallel writes to a shared file to achieve high write bandwidth.
     To do so, this implementation seeks beyond the end of the file to write at different
     offsets from different processes via the seek() method on a python file handle.
