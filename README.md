@@ -69,6 +69,18 @@ The first time you run the training scripts several CUDA kernels will be compile
 pip-compile-multi --autoresolve
 ```
 
+# Run tests
+
+```console
+pytest tests
+
+# if import errors are encountered running with the pytest alias you can run with
+python -m pytest tests
+
+# or just run a single test case
+python -m pytest tests/test_training_debug.py
+```
+
 # Usage
 
 After installation, there are several possible workflows. The most comprehensive is:
