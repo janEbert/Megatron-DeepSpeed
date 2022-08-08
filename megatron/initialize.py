@@ -69,7 +69,7 @@ def git_ds_info():
 
 
 def initialize_megatron(extra_args_provider=None, args_defaults={},
-                        ignore_unknown_args=False, allow_no_cuda=False):
+                        ignore_unknown_args=False, allow_no_cuda=False, args=None):
     """Set global variables, initialize distributed, and
     set autoresume and random seeds.
     `allow_no_cuda` should not be set unless using megatron for cpu only
@@ -86,7 +86,7 @@ def initialize_megatron(extra_args_provider=None, args_defaults={},
     # tensorboard-writer, and timers.
     set_global_variables(extra_args_provider=extra_args_provider,
                          args_defaults=args_defaults,
-                         ignore_unknown_args=ignore_unknown_args)
+                         ignore_unknown_args=ignore_unknown_args, args=args)
 
     # torch.distributed initialization
     def finish_mpu_init():

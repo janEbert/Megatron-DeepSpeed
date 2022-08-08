@@ -30,7 +30,7 @@ from megatron.logging import log_levels
 
 
 def parse_args(extra_args_provider=None, defaults={},
-               ignore_unknown_args=False):
+               ignore_unknown_args=False, args=None):
     """Parse all arguments."""
     parser = argparse.ArgumentParser(description='Megatron-LM Arguments',
                                      allow_abbrev=False)
@@ -62,9 +62,9 @@ def parse_args(extra_args_provider=None, defaults={},
 
     # Parse.
     if ignore_unknown_args:
-        args, _ = parser.parse_known_args()
+        args, _ = parser.parse_known_args(args=args)
     else:
-        args = parser.parse_args()
+        args = parser.parse_args(args=args)
 
     # Distributed args.
     args.rank = int(os.getenv('RANK', '0'))
