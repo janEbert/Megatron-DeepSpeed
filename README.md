@@ -36,12 +36,13 @@ pip install -e .
 ```
 git clone https://github.com/NVIDIA/apex
 cd apex
+git checkout cd0a1f11061068db45f12ef829ca3250389cd7ae
 pip install --global-option="--cpp_ext" --global-option="--cuda_ext" --no-cache -v --disable-pip-version-check .  2>&1 | tee build.log
 ```
 
 (on JZ it's done in a special way, see [here](https://github.com/bigscience-workshop/bigscience/tree/master/jz/envs#apex).)
 
-3. Install `deepspeed`
+3. (Optional) Install `deepspeed`
 
 ```
 git clone https://github.com/microsoft/deepspeed
@@ -55,7 +56,7 @@ adjust `TORCH_CUDA_ARCH_LIST="7.0"` to the architecture of your NVIDIA GPU (or j
 (on JZ it's done in a special way, see [here](https://github.com/bigscience-workshop/bigscience/tree/master/jz/envs#deepspeed).)
 
 
-3. CUDA kernels compilation
+3. (Optional) CUDA kernels compilation
 
 The first time you run the training scripts several CUDA kernels will be compiled. Which means you need to have a cuda environment set up in your environment and it should match the version pytorch was built with.
 
