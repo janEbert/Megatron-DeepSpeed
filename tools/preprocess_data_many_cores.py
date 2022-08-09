@@ -33,6 +33,7 @@ import argparse
 import collections
 import itertools
 import json
+import logging
 import multiprocessing
 import os
 from pyarrow.parquet import ParquetDataset
@@ -44,6 +45,7 @@ from multiprocessing.connection import Connection
 
 try:
     import nltk
+
     nltk_available = True
 except ImportError:
     nltk_available = False
@@ -58,7 +60,6 @@ from megatron.data.indexed_dataset import index_file_path, data_file_path, best_
 
 # https://stackoverflow.com/questions/33139531/preserve-empty-lines-with-nltks-punkt-tokenizer
 class CustomLanguageVars(nltk.tokenize.punkt.PunktLanguageVars):
-
     _period_context_fmt = r"""
         \S*                          # some word material
         %(SentEndChars)s             # a potential sentence ending
@@ -69,9 +70,11 @@ class CustomLanguageVars(nltk.tokenize.punkt.PunktLanguageVars):
             (?P<next_tok>\S+)     #  <-- Normally you would have \s+ here
         ))"""
 
+
 class IdentitySplitter(object):
     def tokenize(self, *text):
         return text
+
 
 class Encoder(object):
     def __init__(self, args):
@@ -87,8 +90,8 @@ class Encoder(object):
             if args.keep_newlines:
                 # this prevents punkt from eating newlines after sentences
                 self.splitter = nltk.tokenize.punkt.PunktSentenceTokenizer(
-                    train_text = splitter._params,
-                    lang_vars = CustomLanguageVars())
+                    train_text=splitter._params,
+                    lang_vars=CustomLanguageVars())
             else:
                 self.splitter = splitter
 
@@ -169,6 +172,13 @@ def get_args():
     group = parser.add_argument_group(title='input data')
     group.add_argument('--input', type=str, required=True,
                        help='Path to input JSON')
+    group.add_argument(
+        '--input-format',
+        type=str,
+        default='parquet',
+        choices=['parquet', 'jsonl'],
+        help='Data input format',
+    )
     group.add_argument('--json-keys', nargs='+', default=['text'],
                        help='space separate listed of keys to extract from json')
     group.add_argument('--split-sentences', action='store_true',
@@ -178,7 +188,7 @@ def get_args():
 
     group = parser.add_argument_group(title='tokenizer')
     group.add_argument('--tokenizer-type', type=str, required=True,
-                       choices=['BertWordPieceLowerCase','BertWordPieceCase',
+                       choices=['BertWordPieceLowerCase', 'BertWordPieceCase',
                                 'GPT2BPETokenizer', 'PretrainedFromHF'],
                        help='What type of tokenizer to use.')
     group.add_argument('--vocab-file', type=str, default=None,
@@ -187,7 +197,7 @@ def get_args():
                        help='Path to the BPE merge file (if necessary).')
     group.add_argument('--append-eod', action='store_true',
                        help='Append an <eod> token to the end of a document.')
-    group.add_argument("--tokenizer-name-or-path", type=str, default=None, 
+    group.add_argument("--tokenizer-name-or-path", type=str, default=None,
                        help="Name or path of the huggingface tokenizer.")
     group.add_argument('--make-vocab-size-divisible-by', type=int, default=128,
                        help='Pad the vocab size to be divisible by this value.'
@@ -223,38 +233,42 @@ def get_args():
 
     return args
 
-def fill_simple_queue(filename, simple_queue, chunk_size: int):
-    # TODO: Assess if instead we could feed pointers which process can then load.
-    if os.path.isdir(filename):
 
-        parquet_dataset_reader = (
-            ParquetDataset(
-                path_or_paths=filename,
-                memory_map=True
-            )
-            .read()
-            .to_reader(max_chunksize=chunk_size)
+def _read_from_parquet(input_path: str, simple_queue: multiprocessing.Queue, chunk_size: int) -> None:
+    if os.path.isdir(input_path) is False:
+        logging.warning(f"The dataset is of type PARQUET, but we are only passing a single file via {input_path}.")
+    parquet_dataset_reader = (
+        ParquetDataset(
+            path_or_paths=input_path,
+            memory_map=True
         )
+        .read()  # Generates PyArrow table
+        .to_reader(max_chunksize=chunk_size)  # Converts the table to a RecordBatchReader
+    )
+    for batch in parquet_dataset_reader:
+        batch = tuple(
+            json.dumps(item) for item in batch.to_pylist()
+        )
+        simple_queue.put(batch)
 
-        print("Start filling queue", flush=True)
 
-        for batch in parquet_dataset_reader:
-            batch = tuple(
-                json.dumps(item) for item in batch.to_pylist()
-            )
-            simple_queue.put(batch)
+def _read_from_jsonl(input_path: str, simple_queue: multiprocessing.Queue, chunk_size: int) -> None:
+    with open(input_path, "r") as f:
+        while True:
+            acc = tuple(itertools.islice(f, chunk_size))
+            if len(acc) == 0:
+                simple_queue.put(None)
+                break
+            simple_queue.put(acc)
 
-        print("Finished reading input file", flush=True)
-    else:
-        with open(filename, "r") as f:
-            print("Start filling queue", flush=True)
-            while True:
-                acc = tuple(itertools.islice(f, chunk_size))
-                if len(acc) == 0:
-                    simple_queue.put(None)
-                    print(f"Finished reading input file", flush=True)
-                    return
-                simple_queue.put(acc)
+
+def fill_simple_queue(input_path: str, input_format: str, simple_queue: multiprocessing.Queue, chunk_size: int) -> None:
+    # TODO: Assess if instead we could feed pointers which process can then load.
+    reading_func = _read_from_parquet if input_format == 'parquet' else _read_from_jsonl
+    print("Start filling queue", flush=True)
+    reading_func(input_path, simple_queue, chunk_size)
+    print(f"Finished reading input file", flush=True)
+
 
 def log(readers, log_interval):
     print("Start Logging", flush=True)
@@ -265,9 +279,9 @@ def log(readers, log_interval):
 
     # we want to compute a rolling average of bytes processed over last 10k documents (more or less)
     bytes_queue_max_length = 10_000 // log_interval + 1
-    bytes_queue = collections.deque(maxlen= bytes_queue_max_length)
+    bytes_queue = collections.deque(maxlen=bytes_queue_max_length)
     # we fill the queue with (start_time, 0)
-    bytes_queue.extend([(proc_start, total_bytes_processed)]*bytes_queue_max_length)
+    bytes_queue.extend([(proc_start, total_bytes_processed)] * bytes_queue_max_length)
 
     while len(readers) != 0:
         for r in multiprocessing.connection.wait(readers):
@@ -299,17 +313,19 @@ def log(readers, log_interval):
                       f"({doc_processed / elapsed} docs/s, {mbs} MB/s).", flush=True)
 
 
-def get_output_filename(prefix, key, level, process_index = None):
+def get_output_filename(prefix, key, level, process_index=None):
     if process_index is None:
         return f"{prefix}_{key}_{level}"
     else:
         return f"{prefix}_{key}_{level}_{process_index}"
 
+
 def main():
     args = get_args()
 
     print("Opening", args.input)
-    simple_queue = multiprocessing.Queue(1_000) # we can also limit the number of elements to reduce the memory footprint.
+    simple_queue = multiprocessing.Queue(
+        1_000)  # we can also limit the number of elements to reduce the memory footprint.
     chunk_size = 25
 
     if nltk_available and args.split_sentences:
@@ -323,9 +339,13 @@ def main():
                              "original file and dispatching them to the rest of the workers to preprocess "
     readers, writers = list(zip(*[multiprocessing.Pipe(duplex=False) for _ in range(args.workers - 1)]))
     process_ids = list(range(len(writers)))
-    processes = [multiprocessing.Process(target=process_samples, args=(simple_queue, process_id, args, level, writer)) for process_id, writer in zip(process_ids, writers)]
+    processes = [multiprocessing.Process(target=process_samples, args=(simple_queue, process_id, args, level, writer))
+                 for process_id, writer in zip(process_ids, writers)]
     log_thread = threading.Thread(target=log, args=(list(readers), args.log_interval))
-    fill_thread = multiprocessing.Process(target=fill_simple_queue, args=(args.input, simple_queue, chunk_size))
+    fill_thread = multiprocessing.Process(
+        target=fill_simple_queue,
+        args=(args.input, args.input_format, simple_queue, chunk_size),
+    )
 
     fill_thread.start()
     log_thread.start()
@@ -345,7 +365,7 @@ def main():
     for process in processes:
         process.join()
         process.close()
-    log_thread.join() #TODO: figure out why there seems to be a possible dead lock situation.
+    log_thread.join()  # TODO: figure out why there seems to be a possible dead lock situation.
 
     # TODO: this may be done after.
     print("Merging files together", flush=True)
@@ -379,6 +399,7 @@ def main():
             output_filename = get_output_filename(args.output_prefix, key, level, process_id)
             os.remove(data_file_path(output_filename))
             os.remove(index_file_path(output_filename))
+
 
 if __name__ == '__main__':
     main()
