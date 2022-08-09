@@ -15,10 +15,12 @@
 import filecmp
 import io
 import json
+import pandas as pd
 import re
 import os
 import unittest
 import functools
+import tempfile
 
 from pathlib import Path
 
@@ -32,19 +34,36 @@ from datasets import load_dataset
 
 set_seed(42)
 
+def _get_text_line(line_length):
+    # XXX: fix to generate line_length
+    return "It's a wonderful world. I'm just walking on air. Talk of heaven on earth. I've got more than my share. Haven't got a care. Happy all day through. It's a wonderful world. Loving wonderful you!"
+
 
 def write_jsonl(path, lines_num=1000, line_length=1024):
-    def get_text_line(line_length):
-        # XXX: fix to generate line_length
-        return "It's a wonderful world. I'm just walking on air. Talk of heaven on earth. I've got more than my share. Haven't got a care. Happy all day through. It's a wonderful world. Loving wonderful you!"
 
     with io.open(path, "w", encoding="utf-8") as f:
 
         for i in range(lines_num):
-            rec = dict(text=get_text_line(line_length))
+            rec = dict(text=_get_text_line(line_length))
             x = json.dumps(rec, indent=0, ensure_ascii=False)
             x = re.sub(r'\n', ' ', x, 0, re.M)
             f.write(x + "\n")
+
+
+def write_parquet(path, lines_num=1000, line_length=1024):
+
+    parquet_data = list()
+
+    for i in range(lines_num):
+        rec = dict(text=_get_text_line(line_length))
+        x = json.dumps(rec, indent=0, ensure_ascii=False)
+        x = re.sub(r'\n', ' ', x, 0, re.M)
+        parquet_data.append(x + "\n")
+
+    parquet_data = pd.DataFrame({"text": parquet_data})
+
+    parquet_data.to_parquet(path)
+
 
 @functools.lru_cache()
 def download_hf_dataset(dsetname):
@@ -298,3 +317,31 @@ class MegDSTestPreprocessing(TestCasePlus):
         execute_subprocess_async(cmd, env=self.get_env())
 
         self.compare_meg_data_files(f"{output_prefix}_text_document", f"{data_dir}/meg-gpt2-openwebtext_text_document")
+
+    def test_preprocessing_many_cores_parquet(self):
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            src_dir = self.src_dir
+
+            input_path = f"{temp_dir}/input.parquet"
+            write_parquet(input_path)
+
+            output_prefix = f"{temp_dir}/test-ds"
+
+            cmd = f"""
+            python {src_dir}/tools/preprocess_data_many_cores.py
+                --input {input_path}
+                --output-prefix {output_prefix}
+                --dataset-impl mmap
+                --tokenizer-type PretrainedFromHF
+                --tokenizer-name-or-path t5-small
+                --workers 2
+                --append-eod
+            """.split()
+
+            # keep for quick debug
+            # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
+            execute_subprocess_async(cmd, env=self.get_env())
+
+            self.assertTrue(Path(f"{output_prefix}_text_document.bin").exists(), )
+            self.assertTrue(Path(f"{output_prefix}_text_document.idx").exists(), )
