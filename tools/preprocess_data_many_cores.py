@@ -250,6 +250,7 @@ def _read_from_parquet(input_path: str, simple_queue: multiprocessing.Queue, chu
             json.dumps(item) for item in batch.to_pylist()
         )
         simple_queue.put(batch)
+    simple_queue.put(None)
 
 
 def _read_from_jsonl(input_path: str, simple_queue: multiprocessing.Queue, chunk_size: int) -> None:
