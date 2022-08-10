@@ -34,8 +34,8 @@ from datasets import load_dataset
 
 set_seed(42)
 
-def _get_text_line(line_length):
-    # XXX: fix to generate line_length
+def _get_text_line() -> str:
+    """Return a line of text."""
     return "It's a wonderful world. I'm just walking on air. Talk of heaven on earth. I've got more than my share." \
            " Haven't got a care. Happy all day through. It's a wonderful world. Loving wonderful you!"
 
@@ -51,8 +51,8 @@ def write_jsonl(path, lines_num=1000, line_length=1024):
             f.write(x + "\n")
 
 
-def write_parquet(path, lines_num=1000, line_length=1024):
-
+def create_parquet_dataset(path, lines_num=1000, line_length=1024) -> None:
+    """Creates a dataset in the Parquet format."""
     parquet_data = list()
 
     for i in range(lines_num):
@@ -320,12 +320,12 @@ class MegDSTestPreprocessing(TestCasePlus):
         self.compare_meg_data_files(f"{output_prefix}_text_document", f"{data_dir}/meg-gpt2-openwebtext_text_document")
 
     def test_preprocessing_many_cores_parquet(self):
-
+        """Tests preprocessing of datasets in the Parquet format."""
         with tempfile.TemporaryDirectory() as temp_dir:
             src_dir = self.src_dir
 
             input_path = f"{temp_dir}/input.parquet"
-            write_parquet(input_path)
+            create_parquet_dataset(input_path)
 
             output_prefix = f"{temp_dir}/test-ds"
 
