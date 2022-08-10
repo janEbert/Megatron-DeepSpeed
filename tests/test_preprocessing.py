@@ -45,7 +45,7 @@ def write_jsonl(path, lines_num=1000, line_length=1024):
     with io.open(path, "w", encoding="utf-8") as f:
 
         for i in range(lines_num):
-            rec = dict(text=_get_text_line(line_length))
+            rec = dict(text=_get_text_line())
             x = json.dumps(rec, indent=0, ensure_ascii=False)
             x = re.sub(r'\n', ' ', x, 0, re.M)
             f.write(x + "\n")
@@ -56,7 +56,7 @@ def create_parquet_dataset(path, lines_num=1000, line_length=1024) -> None:
     parquet_data = list()
 
     for i in range(lines_num):
-        rec = dict(text=_get_text_line(line_length))
+        rec = dict(text=_get_text_line())
         x = json.dumps(rec, indent=0, ensure_ascii=False)
         x = re.sub(r'\n', ' ', x, 0, re.M)
         parquet_data.append(x + "\n")
