@@ -36,7 +36,8 @@ set_seed(42)
 
 def _get_text_line(line_length):
     # XXX: fix to generate line_length
-    return "It's a wonderful world. I'm just walking on air. Talk of heaven on earth. I've got more than my share. Haven't got a care. Happy all day through. It's a wonderful world. Loving wonderful you!"
+    return "It's a wonderful world. I'm just walking on air. Talk of heaven on earth. I've got more than my share." \
+           " Haven't got a care. Happy all day through. It's a wonderful world. Loving wonderful you!"
 
 
 def write_jsonl(path, lines_num=1000, line_length=1024):
