@@ -259,7 +259,7 @@ def _read_from_jsonl(input_path: str, simple_queue: multiprocessing.Queue, chunk
             acc = tuple(itertools.islice(f, chunk_size))
             if len(acc) == 0:
                 simple_queue.put(None)
-                break
+                return
             simple_queue.put(acc)
 
 
