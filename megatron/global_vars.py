@@ -19,6 +19,7 @@ import functools
 import os
 import sys
 import time
+from typing import Optional, Callable, Dict, List
 
 from packaging import version
 from pathlib import Path
@@ -36,6 +37,7 @@ _GLOBAL_TENSORBOARD_WRITER = None
 _GLOBAL_CODECARBON_TRACKER = None
 _GLOBAL_ADLR_AUTORESUME = None
 _GLOBAL_TIMERS = None
+
 
 def get_args():
     """Return arguments."""
@@ -67,10 +69,12 @@ def get_tensorboard_writer():
     to check if it is initialized."""
     return _GLOBAL_TENSORBOARD_WRITER
 
+
 def get_codecarbon_tracker():
     """Return codecarbon tracker. It can be None so no need
     to check if it is initialized."""
     return _GLOBAL_CODECARBON_TRACKER
+
 
 def get_adlr_autoresume():
     """ADLR autoresume object. It can be None so no need
@@ -84,12 +88,16 @@ def get_timers():
     return _GLOBAL_TIMERS
 
 
-def set_global_variables(extra_args_provider=None, args_defaults={},
-                         ignore_unknown_args=False):
+def set_global_variables(
+    extra_args_provider: Optional[Callable] = None,
+    args_defaults: Dict = {},
+    ignore_unknown_args: bool = False,
+    args: Optional[List[str]] = None,
+):
     """Set args, tokenizer, tensorboard-writer, adlr-autoresume, and timers."""
     args = _parse_args(extra_args_provider=extra_args_provider,
                        defaults=args_defaults,
-                       ignore_unknown_args=ignore_unknown_args)
+                       ignore_unknown_args=ignore_unknown_args, args=args)
     _build_num_microbatches_calculator(args)
     if args.vocab_file or args.tokenizer_name_or_path:
         _ = _build_tokenizer(args)
@@ -99,19 +107,22 @@ def set_global_variables(extra_args_provider=None, args_defaults={},
     _set_timers()
 
 
-def _parse_args(extra_args_provider=None, defaults={},
-                ignore_unknown_args=False):
+def _parse_args(
+    extra_args_provider: Optional[Callable] = None,
+    defaults: Dict = {},
+    ignore_unknown_args: bool = False,
+    args: Optional[List[str]] = None,
+):
     """Parse entire arguments."""
     global _GLOBAL_ARGS
     _ensure_var_is_not_initialized(_GLOBAL_ARGS, 'args')
     _GLOBAL_ARGS = parse_args(extra_args_provider=extra_args_provider,
                               defaults=defaults,
-                              ignore_unknown_args=ignore_unknown_args)
+                              ignore_unknown_args=ignore_unknown_args, args=args)
     return _GLOBAL_ARGS
 
 
 def _build_num_microbatches_calculator(args):
-
     global _GLOBAL_NUM_MICROBATCHES_CALCULATOR
     _ensure_var_is_not_initialized(_GLOBAL_NUM_MICROBATCHES_CALCULATOR,
                                    'num microbatches calculator')
@@ -141,7 +152,7 @@ def _set_tensorboard_writer(args):
                                    'tensorboard writer')
 
     if hasattr(args, 'tensorboard_dir') and \
-       args.tensorboard_dir and args.rank == (args.world_size - 1):
+        args.tensorboard_dir and args.rank == (args.world_size - 1):
         try:
             from torch.utils.tensorboard import SummaryWriter
             print('> setting tensorboard ...')
@@ -161,8 +172,7 @@ def _set_tensorboard_writer(args):
 
 # Important: the codecarbon is very unstable and its latest incarnation using the python scheduler interferes with the asyncio library we use in the test suite which breaks everything, so making this a no-op for now.
 def _set_codecarbon_tracker(args):
-
-    return # turned off
+    return  # turned off
 
     global _GLOBAL_CODECARBON_TRACKER
     if not hasattr(args, 'codecarbon_dir') or args.codecarbon_dir is None:
@@ -198,38 +208,35 @@ def _set_codecarbon_tracker(args):
 
 
 def codecarbon_tracker_start():
-
-    return # turned off, see the notes above
+    return  # turned off, see the notes above
 
     global _GLOBAL_CODECARBON_TRACKER
     if _GLOBAL_CODECARBON_TRACKER is None:
         return
 
-    #print("CC START")
+    # print("CC START")
     _GLOBAL_CODECARBON_TRACKER.start()
 
 
 def codecarbon_tracker_stop():
-
-    return # turned off, see the notes above
+    return  # turned off, see the notes above
 
     global _GLOBAL_CODECARBON_TRACKER
     if _GLOBAL_CODECARBON_TRACKER is None:
         return
 
-    #print("CC STOP")
+    # print("CC STOP")
     _GLOBAL_CODECARBON_TRACKER.stop()
 
 
 def codecarbon_tracker_flush():
-
-    return # turned off, see the notes above
+    return  # turned off, see the notes above
 
     global _GLOBAL_CODECARBON_TRACKER
     if _GLOBAL_CODECARBON_TRACKER is None:
         return
 
-    #print("CC FLUSH")
+    # print("CC FLUSH")
     _GLOBAL_CODECARBON_TRACKER.flush()
 
 
@@ -347,7 +354,7 @@ class Timers:
         string = 'time (ms)' + string
         if torch.distributed.is_initialized():
             if torch.distributed.get_rank() == (
-                    torch.distributed.get_world_size() - 1):
+                torch.distributed.get_world_size() - 1):
                 print(string, flush=True)
         else:
             print(string, flush=True)

@@ -16,9 +16,13 @@ Here is doc with just [instructions to going from 0 to training really fast](sta
 
 1. Install `bigscience-workshop/Megatron-DeepSpeed`
 ```
-git clone https://github.com/bigscience-workshop/Megatron-DeepSpeed
-cd Megatron-DeepSpeed
-pip install -r requirements.txt
+conda create -n open-gptx-bigscience python=3.9
+conda activate open-gptx-bigscience
+conda install pytorch==1.12.1 cudatoolkit=11.3 -c pytorch
+git clone https://github.com/OpenGPTX/bigscience_megatron_deepspeed
+cd bigscience_megatron_deepspeed
+pip install -r requirements/requirements.txt
+pip install -r requirements/requirements_dev.txt
 ```
 
 You can now use this repo directly by working directly from it. You don't need to install it unless you write your own scripts elsewhere that use the modules in this repo, in which case you may want to do:
@@ -32,12 +36,13 @@ pip install -e .
 ```
 git clone https://github.com/NVIDIA/apex
 cd apex
+git checkout cd0a1f11061068db45f12ef829ca3250389cd7ae
 pip install --global-option="--cpp_ext" --global-option="--cuda_ext" --no-cache -v --disable-pip-version-check .  2>&1 | tee build.log
 ```
 
 (on JZ it's done in a special way, see [here](https://github.com/bigscience-workshop/bigscience/tree/master/jz/envs#apex).)
 
-3. Install `deepspeed`
+3. (Optional) Install `deepspeed`
 
 ```
 git clone https://github.com/microsoft/deepspeed
@@ -51,10 +56,30 @@ adjust `TORCH_CUDA_ARCH_LIST="7.0"` to the architecture of your NVIDIA GPU (or j
 (on JZ it's done in a special way, see [here](https://github.com/bigscience-workshop/bigscience/tree/master/jz/envs#deepspeed).)
 
 
-3. CUDA kernels compilation
+3. (Optional) CUDA kernels compilation
 
 The first time you run the training scripts several CUDA kernels will be compiled. Which means you need to have a cuda environment set up in your environment and it should match the version pytorch was built with.
 
+# Update requirements
+
+- Add requirements to the respective *.in file in requirements/
+- run pip-compile-multi to compile requirements
+
+```
+pip-compile-multi --autoresolve
+```
+
+# Run tests
+
+```console
+pytest tests
+
+# if import errors are encountered running with the pytest alias you can run with
+python -m pytest tests
+
+# or just run a single test case
+python -m pytest tests/test_training_debug.py
+```
 
 # Usage
 

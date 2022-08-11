@@ -22,16 +22,20 @@ import setuptools
 if sys.version_info < (3,):
     raise Exception("Python 2 is not supported by Megatron.")
 
-from megatron.package_info import (
-    __description__,
-    __contact_names__,
-    __url__,
-    __download_url__,
-    __keywords__,
-    __license__,
-    __package_name__,
-    __version__,
-)
+MAJOR = 1
+MINOR = 1.5
+
+# Use the following formatting: (major, minor)
+VERSION = (MAJOR, MINOR)
+
+__version__ = '.'.join(map(str, VERSION)) + '.bs'
+__package_name__ = 'megatron-lm'
+__contact_names__ = 'NVIDIA INC'
+__url__ = 'https://github.com/NVIDIA/Megatron-LM'
+__download_url__ = 'https://github.com/NVIDIA/Megatron-LM/releases'
+__description__ = 'Megatron-LM: Training Multi-Billion Parameter Language Models Using Model Parallelism.'
+__license__ = 'See https://github.com/NVIDIA/Megatron-LM/blob/master/LICENSE'
+__keywords__ = 'deep learning, Megatron, gpu, NLP, nvidia, pytorch, torch, language'
 
 with open("README.md", "r") as fh:
     long_description = fh.read()
@@ -44,11 +48,14 @@ with open("README.md", "r") as fh:
 def req_file(filename):
     with open(filename) as f:
         content = f.readlines()
-    return [x.strip() for x in content]
+    return [x.strip() for x in content if not x.strip().startswith("#") and not x.strip() == ""]
 
 
-install_requires = req_file("requirements.txt")
-
+install_requires = req_file(
+    "requirements/requirements.txt"
+) + req_file(
+    "requirements/requirements_dev.txt"
+)
 setuptools.setup(
     name=__package_name__,
     # Versions should comply with PEP440.  For a discussion on single-sourcing
@@ -65,27 +72,27 @@ setuptools.setup(
     # The licence under which the project is released
     license=__license__,
     classifiers=[
-        'Intended Audience :: Developers',
-        'Intended Audience :: Science/Research',
-        'Intended Audience :: Information Technology',
+        "Intended Audience :: Developers",
+        "Intended Audience :: Science/Research",
+        "Intended Audience :: Information Technology",
         # Indicate what your project relates to
-        'Topic :: Scientific/Engineering :: Artificial Intelligence',
-        'Topic :: Software Development :: Libraries :: Python Modules',
+        "Topic :: Scientific/Engineering :: Artificial Intelligence",
+        "Topic :: Software Development :: Libraries :: Python Modules",
         # Supported python versions
-        'Programming Language :: Python :: 3.6',
-        'Programming Language :: Python :: 3.7',
-        'Programming Language :: Python :: 3.8',
+        "Programming Language :: Python :: 3.6",
+        "Programming Language :: Python :: 3.7",
+        "Programming Language :: Python :: 3.8",
         # Additional Setting
-        'Environment :: Console',
-        'Natural Language :: English',
-        'Operating System :: OS Independent',
+        "Environment :: Console",
+        "Natural Language :: English",
+        "Operating System :: OS Independent",
     ],
-    python_requires='>=3.6',
+    #python_requires=">=3.6",
     packages=setuptools.find_packages(),
     install_requires=install_requires,
     # Add in any packaged data.
     include_package_data=True,
     zip_safe=False,
     # PyPI package information.
-    keywords=__keywords__
+    keywords=__keywords__,
 )

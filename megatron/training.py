@@ -22,6 +22,8 @@ import sys
 import time
 import json
 # The earliest we can measure the start time.
+from typing import Callable, Optional, List
+
 _TRAIN_START_TIME = time.time()
 
 import torch
@@ -66,11 +68,13 @@ def print_datetime(string):
     print_rank_0('[' + string + '] datetime: {} '.format(time_str))
 
 
-def pretrain(train_valid_test_dataset_provider,
-             model_provider,
-             forward_step_func,
-             extra_args_provider=None,
-             args_defaults={}):
+def pretrain(train_valid_test_dataset_provider: Callable,
+             model_provider: Callable,
+             forward_step_func: Callable,
+             extra_args_provider: Optional[Callable] = None,
+             args_defaults={},
+             args: Optional[List[str]] = None,
+             ):
     """Main training program.
 
     This function will run the followings in the order provided:
@@ -96,8 +100,11 @@ def pretrain(train_valid_test_dataset_provider,
     """
 
     # Initalize and get arguments, timers, and Tensorboard writer.
-    initialize_megatron(extra_args_provider=extra_args_provider,
-                        args_defaults=args_defaults)
+    initialize_megatron(
+        extra_args_provider=extra_args_provider,
+        args_defaults=args_defaults,
+        args=args,
+    )
 
     args = get_args()
 
@@ -135,13 +142,13 @@ def pretrain(train_valid_test_dataset_provider,
             args.curriculum_scheduler = CurriculumScheduler( \
                 args.deepspeed_configuration["curriculum_learning"])
 
-
     # Model, optimizer, and learning rate.
     timers('model-and-optimizer-setup').start()
     model, optimizer, lr_scheduler = setup_model_and_optimizer(model_provider)
     args.parameters_in_billions_no_embedding = get_parameters_in_billions(model, exclude_embeddings=True)
     print_rank_0(f'estimated model parameters: {get_parameters_in_billions(model)}')
-    print_rank_0(f'estimated model parameters without embeddings: {get_parameters_in_billions(model, exclude_embeddings=True)}')
+    print_rank_0(
+        f'estimated model parameters without embeddings: {get_parameters_in_billions(model, exclude_embeddings=True)}')
     timers('model-and-optimizer-setup').stop()
     print_datetime('after model, optimizer, and learning rate '
                    'scheduler are built')
@@ -158,7 +165,7 @@ def pretrain(train_valid_test_dataset_provider,
         test_data_iterator = [data_iterators[2] for data_iterators in all_data_iterators]
     else:
         train_data_iterator, valid_data_iterator, test_data_iterator = build_train_valid_test_data_iterators(
-                train_valid_test_dataset_provider)
+            train_valid_test_dataset_provider)
 
     if args.data_path is not None and len(args.data_path) > 1:
         prefixes, weights = analyze_data_prefix(args.data_path)
@@ -167,7 +174,7 @@ def pretrain(train_valid_test_dataset_provider,
     elif args.train_weighted_split_paths is not None and len(args.train_weighted_split_paths[0]) > 1:
         paths = args.train_weighted_split_paths[0]
         weights = args.train_weighted_split_weights[0]
-        data_prefix = [j for i in [[w,p] for w,p in zip(weights, paths)] for j in i]
+        data_prefix = [j for i in [[w, p] for w, p in zip(weights, paths)] for j in i]
         prefixes, weights = analyze_data_prefix(data_prefix)
         setattr(args, "data_prefixes", prefixes)
         setattr(args, "data_weights", weights)
@@ -216,7 +223,6 @@ def pretrain(train_valid_test_dataset_provider,
 
 
 def update_train_iters(args):
-
     # For iteration-based training, we don't need to do anything
     if args.train_iters:
         return
@@ -251,7 +257,7 @@ def get_model(model_provider_func):
 
     # Build model.
     if mpu.get_pipeline_model_parallel_world_size() > 1 and \
-       args.virtual_pipeline_model_parallel_size is not None:
+        args.virtual_pipeline_model_parallel_size is not None:
         model = []
         for i in range(args.virtual_pipeline_model_parallel_size):
             mpu.set_virtual_pipeline_model_parallel_rank(i)
@@ -270,7 +276,6 @@ def get_model(model_provider_func):
             pre_process=pre_process,
             post_process=post_process
         )
-
 
     if not isinstance(model, list):
         model = [model]
@@ -383,7 +388,6 @@ def setup_model_and_optimizer(model_provider_func):
         optimizer = get_megatron_optimizer(unwrapped_model)
         lr_scheduler = get_learning_rate_scheduler(optimizer)
 
-
     if args.deepspeed:
         print_rank_0("DeepSpeed is enabled.")
         pp = mpu.get_pipeline_model_parallel_world_size()
@@ -446,7 +450,7 @@ def train_step(forward_step_func, data_iterator,
         skipped_iter = 0
         grad_norm = model[0].get_global_grad_norm()
         num_zeros_in_grad = 0
-        return {'lm loss' : loss}, skipped_iter, grad_norm, num_zeros_in_grad
+        return {'lm loss': loss}, skipped_iter, grad_norm, num_zeros_in_grad
 
     # Set grad to zero.
     if not args.deepspeed:
@@ -485,7 +489,7 @@ def train_step(forward_step_func, data_iterator,
     if not args.deepspeed:
         if (mpu.is_pipeline_first_stage(ignore_virtual=True) or
             mpu.is_pipeline_last_stage(ignore_virtual=True)) and \
-                mpu.get_pipeline_model_parallel_world_size() > 1:
+            mpu.get_pipeline_model_parallel_world_size() > 1:
             if mpu.is_pipeline_first_stage(ignore_virtual=True):
                 unwrapped_model = model[0]
             elif mpu.is_pipeline_last_stage(ignore_virtual=True):
@@ -583,6 +587,7 @@ def training_log(loss_dict, total_loss_dict, learning_rate, iteration,
     def add_to_logging(name):
         if name in timers.timers:
             timers_to_log.append(name)
+
     add_to_logging('forward-compute')
     add_to_logging('forward-recv')
     add_to_logging('forward-send')
@@ -603,14 +608,14 @@ def training_log(loss_dict, total_loss_dict, learning_rate, iteration,
 
     # Calculate batch size.
     batch_size = args.micro_batch_size * args.data_parallel_size * \
-        get_num_microbatches()
+                 get_num_microbatches()
 
     total_iterations = total_loss_dict[advanced_iters_key] + \
                        total_loss_dict[skipped_iters_key]
 
     # Tensorboard values.
     if writer and (iteration % args.tensorboard_log_interval == 0) and \
-       is_last_rank():
+        is_last_rank():
         writer.add_scalar('steps-vs-samples/y=steps,x=samples', iteration, args.consumed_train_samples)
         writer.add_scalar('steps-vs-samples/y=samples,x=steps', args.consumed_train_samples, iteration)
         writer.add_scalar('steps-vs-tokens/y=steps,x=tokens', iteration, args.consumed_train_tokens)
@@ -700,8 +705,10 @@ def training_log(loss_dict, total_loss_dict, learning_rate, iteration,
         # This leads to 16bsh^2 instead of 8bsh^2 per first feed-forward layer in MLP, thus we increase the coefficient by 8.
         # Refer to https://github.com/bigscience-workshop/Megatron-DeepSpeed/pull/283#issue-1260805063 for more details.
         coefficient = 32 if args.glu_activation else 24
-        flops_per_iteration = (coefficient * checkpoint_activations_factor * batch_size * seq_len * num_layers * (hidden_size**2)) * (1. + (seq_len / (6. * hidden_size)) + (vocab_size / (16. * num_layers * hidden_size)))
-        tflops = flops_per_iteration / (elapsed_time_per_iteration * args.world_size * (10**12))
+        flops_per_iteration = (coefficient * checkpoint_activations_factor * batch_size * seq_len * num_layers * (
+            hidden_size ** 2)) * (1. + (seq_len / (6. * hidden_size)) + (
+            vocab_size / (16. * num_layers * hidden_size)))
+        tflops = flops_per_iteration / (elapsed_time_per_iteration * args.world_size * (10 ** 12))
 
         # only the last rank process has a non-None _GLOBAL_TENSORBOARD_WRITER
         if writer and is_last_rank():
@@ -796,7 +803,9 @@ def train(forward_step_func, model, optimizer, lr_scheduler,
         tp_rank = mpu.get_tensor_model_parallel_rank()
         pp_rank = mpu.get_pipeline_model_parallel_rank()
         preamble = f"[{tp_rank:0>3d}-{pp_rank:0>3d}]"
-        print(f"{preamble} {get_parameters_in_billions(model):.4f}B / {get_parameters_in_billions(model, exclude_embeddings=True):.4f}B", flush=True)
+        print(
+            f"{preamble} {get_parameters_in_billions(model):.4f}B / {get_parameters_in_billions(model, exclude_embeddings=True):.4f}B",
+            flush=True)
         torch.distributed.barrier()
     else:
         torch.distributed.barrier()
@@ -860,7 +869,7 @@ def train(forward_step_func, model, optimizer, lr_scheduler,
         if args.curriculum_learning and \
             args.pipeline_model_parallel_size >= 1:
             args.curriculum_seqlen = args.curriculum_scheduler.update_difficulty( \
-                    args.iteration + 1)
+                args.iteration + 1)
         loss_dict, skipped_iter, grad_norm, num_zeros_in_grad = \
             train_step(forward_step_func,
                        train_data_iterator,
@@ -870,14 +879,15 @@ def train(forward_step_func, model, optimizer, lr_scheduler,
         iteration += 1
         args.iteration = iteration
         new_samples = mpu.get_data_parallel_world_size() * \
-                                       args.micro_batch_size * \
-                                       get_num_microbatches()
+                      args.micro_batch_size * \
+                      get_num_microbatches()
         args.consumed_train_samples += new_samples
         if args.curriculum_learning:
             args.consumed_train_tokens += new_samples * args.curriculum_seqlen
         else:
             args.consumed_train_tokens += new_samples * args.seq_length
-        args.gigaflos_no_embeds += (6 * new_samples * args.seq_length * get_parameters_in_billions(model, exclude_embeddings=True))
+        args.gigaflos_no_embeds += (
+            6 * new_samples * args.seq_length * get_parameters_in_billions(model, exclude_embeddings=True))
 
         # Logging.
         loss_scale = None
@@ -898,13 +908,13 @@ def train(forward_step_func, model, optimizer, lr_scheduler,
 
         # Autoresume
         if args.adlr_autoresume and \
-           (iteration % args.adlr_autoresume_interval == 0):
+            (iteration % args.adlr_autoresume_interval == 0):
             check_adlr_autoresume_termination(iteration, model, optimizer,
                                               lr_scheduler)
 
         # Evaluation
         if args.eval_interval and iteration % args.eval_interval == 0 and \
-           args.do_valid:
+            args.do_valid:
             prefix = 'iteration {}'.format(iteration)
             names = args.valid_weighted_split_names
             names = names if names is not None else ['valid'] * len(valid_data_iterator)
@@ -916,7 +926,7 @@ def train(forward_step_func, model, optimizer, lr_scheduler,
         # Checkpointing
         saved_checkpoint = False
         if args.save and args.save_interval and \
-           iteration % args.save_interval == 0:
+            iteration % args.save_interval == 0:
             save_checkpoint_and_time(iteration, model, optimizer,
                                      lr_scheduler)
             saved_checkpoint = True
@@ -989,7 +999,7 @@ def evaluate(forward_step_func, data_iterator, model, verbose=False):
                 # DeepSpeed uses eval_batch() and already aggregates losses.
                 assert isinstance(model, list) and len(model) == 1
                 loss = model[0].eval_batch(data_iterator)
-                loss_dicts = [{'lm loss' : loss}] * get_num_microbatches()
+                loss_dicts = [{'lm loss': loss}] * get_num_microbatches()
             else:
                 loss_dicts = forward_backward_func(
                     forward_step_func, data_iterator, model, optimizer=None,
@@ -1022,11 +1032,11 @@ def evaluate(forward_step_func, data_iterator, model, verbose=False):
 
     return total_loss_dict
 
+
 def evaluate_and_print_results(prefix, forward_step_func,
                                data_iterator, model,
                                iteration, verbose=False, **kwargs):
     """Helper function to evaluate and dump results on screen."""
-
 
     args = get_args()
     writer = get_tensorboard_writer()
@@ -1036,7 +1046,7 @@ def evaluate_and_print_results(prefix, forward_step_func,
     tf_plot_prefix = f"lm-loss-validation/{ds_name}" if ds_name else "lm-loss-validation"
 
     total_loss_dict = evaluate(forward_step_func, data_iterator, model, verbose)
-    string = '{} loss at {} | '.format(ds_name, prefix) if ds_name is not None\
+    string = '{} loss at {} | '.format(ds_name, prefix) if ds_name is not None \
         else 'validation loss at {} | '.format(prefix)
     for key in total_loss_dict:
         string += '{} value: {:.6E} | '.format(key, total_loss_dict[key].item())
@@ -1076,8 +1086,9 @@ def cyclic_iter(iter):
         for x in iter:
             yield x
 
+
 def build_train_valid_test_data_iterators(
-        build_train_valid_test_datasets_provider):
+    build_train_valid_test_datasets_provider):
     """XXX"""
     args = get_args()
 
@@ -1097,7 +1108,7 @@ def build_train_valid_test_data_iterators(
         assert args.train_samples is None, \
             'only backward compatiblity support for iteration-based training'
         args.consumed_valid_samples = (args.iteration // args.eval_interval) * \
-            args.eval_iters * args.global_batch_size
+                                      args.eval_iters * args.global_batch_size
 
     # Data loader only on rank 0 of each model parallel group.
     if mpu.get_tensor_model_parallel_rank() == 0:
@@ -1145,12 +1156,13 @@ def build_train_valid_test_data_iterators(
         # possibly due to this bug in pytorch https://github.com/pytorch/pytorch/pull/25158. Using
         # num_workers=0 to work around it - the training can't use that since it impacts throughput
         # by a few percent
-        valid_dataloaders = [build_pretraining_data_loader(d, args.consumed_valid_samples // len(valid_ds), num_workers=args.valid_num_workers)
-                            for d in valid_ds] \
-                            if valid_ds is not None else []
+        valid_dataloaders = [build_pretraining_data_loader(d, args.consumed_valid_samples // len(valid_ds),
+                                                           num_workers=args.valid_num_workers)
+                             for d in valid_ds] \
+            if valid_ds is not None else []
         # We collapse None and empty list as both should mean we don't run test
         test_dataloaders = [build_pretraining_data_loader(d, 0) for d in test_ds] \
-                            if test_ds is not None else []
+            if test_ds is not None else []
 
         # Flags to know if we need to do training/validation/testing.
         do_train = train_dataloader is not None and args.train_iters > 0 and not args.eval_only
@@ -1158,8 +1170,9 @@ def build_train_valid_test_data_iterators(
         # Need to broadcast num_tokens and num_type_tokens.
         flags = torch.cuda.LongTensor([
             int(do_train),
-            len(valid_dataloaders) if args.eval_iters > 0 else 0, # eval_iters == 0 is equivalent to having no validation
-            len(test_dataloaders) if args.eval_iters > 0 else 0, # eval_iters == 0 is equivalent to having no test
+            len(valid_dataloaders) if args.eval_iters > 0 else 0,
+            # eval_iters == 0 is equivalent to having no validation
+            len(test_dataloaders) if args.eval_iters > 0 else 0,  # eval_iters == 0 is equivalent to having no test
         ])
     else:
         flags = torch.cuda.LongTensor([0, 0, 0])
@@ -1182,21 +1195,21 @@ def build_train_valid_test_data_iterators(
 
     if train_dataloader is not None:
         train_data_iterator = iter(train_dataloader) if dl_type in ['single'] \
-                              else iter(cyclic_iter(train_dataloader))
+            else iter(cyclic_iter(train_dataloader))
     else:
         train_data_iterator = None
 
     if valid_dataloaders is not None:
         valid_data_iterators = [iter(vdl) if dl_type in ['single'] \
-                              else iter(cyclic_iter(valid_dataloaders))
-                                 for vdl in valid_dataloaders]
+                                    else iter(cyclic_iter(valid_dataloaders))
+                                for vdl in valid_dataloaders]
     else:
         valid_data_iterators = [None] * num_valid_ds
 
     if test_dataloaders is not None:
         test_data_iterators = [iter(tdl) if dl_type in ['single'] \
-                             else iter(cyclic_iter(test_dataloaders))
-                            for tdl in test_dataloaders]
+                                   else iter(cyclic_iter(test_dataloaders))
+                               for tdl in test_dataloaders]
     else:
         test_data_iterators = [None] * num_test_ds
 
