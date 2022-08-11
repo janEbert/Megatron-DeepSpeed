@@ -19,6 +19,7 @@ import random
 import os
 import sys
 import time
+from typing import Optional, Callable, List
 
 import numpy as np
 import torch
@@ -68,8 +69,13 @@ def git_ds_info():
     print(f'**** Git info for Megatron: git_hash={git_hash} git_branch={git_branch} ****')
 
 
-def initialize_megatron(extra_args_provider=None, args_defaults={},
-                        ignore_unknown_args=False, allow_no_cuda=False, args=None):
+def initialize_megatron(
+    extra_args_provider: Optional[Callable] = None,
+    args_defaults: dict = {},
+    ignore_unknown_args: bool = False,
+    allow_no_cuda: bool = False,
+    args: Optional[List[str]] = None,
+):
     """Set global variables, initialize distributed, and
     set autoresume and random seeds.
     `allow_no_cuda` should not be set unless using megatron for cpu only
@@ -84,9 +90,12 @@ def initialize_megatron(extra_args_provider=None, args_defaults={},
 
     # Parse args, build tokenizer, and set adlr-autoresume,
     # tensorboard-writer, and timers.
-    set_global_variables(extra_args_provider=extra_args_provider,
-                         args_defaults=args_defaults,
-                         ignore_unknown_args=ignore_unknown_args, args=args)
+    set_global_variables(
+        extra_args_provider=extra_args_provider,
+        args_defaults=args_defaults,
+        ignore_unknown_args=ignore_unknown_args,
+        args=args,
+    )
 
     # torch.distributed initialization
     def finish_mpu_init():
@@ -141,8 +150,8 @@ def initialize_megatron(extra_args_provider=None, args_defaults={},
     if args.rank == 0:
         git_ds_info()
 
-    if  args.lazy_mpu_init:
-        args.use_cpu_initialization=True
+    if args.lazy_mpu_init:
+        args.use_cpu_initialization = True
         # delayed initialization of DDP-related stuff
         # We only set basic DDP globals
         set_tensor_model_parallel_world_size(args.tensor_model_parallel_size)
@@ -168,7 +177,6 @@ def initialize_megatron(extra_args_provider=None, args_defaults={},
 
 
 def _compile_dependencies():
-
     args = get_args()
 
     # =========================
@@ -194,8 +202,8 @@ def _compile_dependencies():
         args.micro_batch_size
     # Constraints on sequence length and attn_batch_size to enable warp based
     # optimization and upper triangular optimization (for causal mask)
-    custom_kernel_constraint = seq_len > 16 and seq_len <=2048 and \
-        seq_len % 4 == 0 and attn_batch_size % 4 == 0
+    custom_kernel_constraint = seq_len > 16 and seq_len <= 2048 and \
+                               seq_len % 4 == 0 and attn_batch_size % 4 == 0
     # Print a warning.
     if not ((args.fp16 or args.bf16) and
             custom_kernel_constraint and
@@ -229,7 +237,7 @@ def _compile_dependencies():
     if torch.distributed.get_rank() == 0:
         print('>>> done with compiling and loading fused kernels. '
               'Compilation time: {:.3f} seconds'.format(
-                  time.time() - start_time), flush=True)
+            time.time() - start_time), flush=True)
 
 
 def setup_deepspeed_random_and_activation_checkpointing(args):
@@ -349,7 +357,7 @@ def log_restart_to_tensorboard():
     if writer:
         # emulate a blip to avoid flatline
         writer.add_scalar('iteration-time/world_size', args.world_size, args.iteration)
-        writer.add_scalar('iteration-time/world_size', 0, args.iteration+1)
+        writer.add_scalar('iteration-time/world_size', 0, args.iteration + 1)
 
 
 def _initialize_mem_buffs():

@@ -20,7 +20,7 @@ import collections
 import os
 import re
 import time
-from typing import Dict, Optional, Callable
+from typing import Dict, Optional, Callable, List
 
 import torch
 import deepspeed
@@ -34,7 +34,7 @@ def parse_args(
     extra_args_provider: Optional[Callable] = None,
     defaults: Dict = {},
     ignore_unknown_args: bool = False,
-    args: str = None,
+    args: Optional[List[str]] = None,
 ):
     """Parse all arguments."""
     parser = argparse.ArgumentParser(
