@@ -430,11 +430,6 @@ def _add_network_size_args(parser):
 def _add_logging_args(parser):
     group = parser.add_argument_group(title='logging')
 
-    group.add_argument("--wandb_group", type=str, default=None,
-        help='Weights and Biases group name - used to group together "runs".',)
-    group.add_argument("--wandb_team", type=str, default=None,
-        help="Team name for Weights and Biases.",)
-
     group.add_argument('--log-params-norm', action='store_true',
                        help='If set, calculate and log parameters norm.')
     group.add_argument('--log-num-zeros-in-grad', action='store_true',
@@ -447,26 +442,20 @@ def _add_logging_args(parser):
                             'flush to disk.')
     group.add_argument('--log-timers-to-tensorboard', action='store_true',
                        help='If set, write timers to tensorboard.')
-
+    group.add_argument('--log-batch-size-to-tensorboard', action='store_true',
+                       help='If set, write batch-size to tensorboard.')
     group.add_argument('--no-log-learnig-rate-to-tensorboard',
                        action='store_false',
                        help='Disable learning rate logging to tensorboard.',
                        dest='log_learning_rate_to_tensorboard')
-
-    group.add_argument('--log-batch-size-to-tensorboard', action='store_true',
-                       help='If set, write batch-size to tensorboard.')
-
     group.add_argument('--no-log-loss-scale-to-tensorboard',
                        action='store_false',
                        help='Disable loss-scale logging to tensorboard.',
                        dest='log_loss_scale_to_tensorboard')
-
     group.add_argument('--log-validation-ppl-to-tensorboard',
                        action='store_true',
                        help='If set, write validation perplexity to '
                             'tensorboard.')
-
-
 
     return parser
 
