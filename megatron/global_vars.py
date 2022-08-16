@@ -14,6 +14,10 @@
 # limitations under the License.
 
 """Megatron global variables."""
+import wandb
+from wandb import UsageError
+import requests
+import socket
 
 import functools
 import os
@@ -319,12 +323,77 @@ class _Timer:
             self.start()
         return elapsed_
 
+def local_rank():
+    """Local rank of process"""
+    local_rank = os.environ.get("LOCAL_RANK")
+    if local_rank is None:
+        print(
+            "utils.local_rank() environment variable LOCAL_RANK not set, defaulting to 0",
+            flush=True,
+        )
+        local_rank = 0
+    return int(local_rank)
+
+
+def is_local_main():
+    """True if is the local main process"""
+    return local_rank() == 0
+
+def get_wandb_api_key(args):
+    # This function belongs to GPT-NeoX
+    """Get Weights and Biases API key from ENV or .netrc file. Otherwise return None"""
+    if "WANDB_LOCAL" in os.environ:
+        return "LOCAL"
+    if "WANDB_API_KEY" in os.environ:
+        return os.environ["WANDB_API_KEY"]
+
+    wandb_token = requests.utils.get_netrc_auth(args.wandb_host)
+
+    if wandb_token is not None:
+        return wandb_token[1]
+
+
+def init_wandb(args):
+    # This function belongs to GPT-NeoX
+    # Wandb. (one worker per machine)
+    if args.use_wandb == False:
+        return
+
+    if not args.wandb_init_all_ranks:
+        use_wandb = is_local_main() and (
+            get_wandb_api_key(args=args) is not None
+        )
+        args.update_value("use_wandb", use_wandb)
+    if args.use_wandb:
+        group_name = args.wandb_group
+        name = f"{socket.gethostname()}-{local_rank()}" if group_name else None
+        try:
+            wandb.init(
+                project=args.wandb_project,
+                group=group_name,
+                name=name,
+                save_code=False,
+                force=False,
+                entity=args.wandb_team,
+            )
+        except UsageError as e:
+            args.update_value("use_wandb", False)
+            print(e)
+            print(
+                "Skipping wandb. Execute `wandb login` on local or main node machine to enable.",
+                flush=True,
+            )
+        wandb.config.update(args.all_config)
+
+
 
 class Timers:
     """Group of timers."""
 
-    def __init__(self):
+    def __init__(self, use_wandb, tensorboard_writer):
         self.timers = {}
+        self.use_wandb = use_wandb
+        self.tensorboard_writer = tensorboard_writer
 
     def __call__(self, name):
         if name not in self.timers:
@@ -339,7 +408,12 @@ class Timers:
         assert normalizer > 0.0
         for name in names:
             value = self.timers[name].elapsed(reset=reset) / normalizer
-            writer.add_scalar(f'time/{name}-time', value, iteration)
+            # writer.add_scalar(f'time/{name}-time', value, iteration)
+            if self.tensorboard_writer:
+                self.tensorboard_writer.add_scalar(f"timers/{name}", value, iteration)
+
+            if self.use_wandb:
+                wandb.log({f"timers/{name}": value}, step=iteration)
 
     def log(self, names, normalizer=1.0, reset=True):
         """Log a group of timers."""

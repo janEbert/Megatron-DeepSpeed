@@ -14,7 +14,7 @@
 # limitations under the License.
 
 """Pretrain utilities."""
-
+import wandb
 from datetime import datetime
 import bisect
 import math
@@ -132,11 +132,11 @@ def pretrain(train_valid_test_dataset_provider: Callable,
         args.deepspeed_configuration = json.load(
             open(args.deepspeed_config, 'r', encoding='utf-8'))
         if "curriculum_learning" in args.deepspeed_configuration and \
-            "enabled" in args.deepspeed_configuration["curriculum_learning"]:
+                "enabled" in args.deepspeed_configuration["curriculum_learning"]:
             args.curriculum_learning = args.deepspeed_configuration[ \
                 "curriculum_learning"]["enabled"]
         if args.curriculum_learning and \
-            args.pipeline_model_parallel_size >= 1:
+                args.pipeline_model_parallel_size >= 1:
             from deepspeed.runtime.data_pipeline.curriculum_scheduler \
                 import CurriculumScheduler
             args.curriculum_scheduler = CurriculumScheduler( \
@@ -257,7 +257,7 @@ def get_model(model_provider_func):
 
     # Build model.
     if mpu.get_pipeline_model_parallel_world_size() > 1 and \
-        args.virtual_pipeline_model_parallel_size is not None:
+            args.virtual_pipeline_model_parallel_size is not None:
         model = []
         for i in range(args.virtual_pipeline_model_parallel_size):
             mpu.set_virtual_pipeline_model_parallel_rank(i)
@@ -429,7 +429,7 @@ def setup_model_and_optimizer(model_provider_func):
 
     # get model without FP16 and/or TorchDDP wrappers
     if args.iteration == 0 and len(unwrapped_model) == 1 \
-        and hasattr(unwrapped_model[0], 'init_state_dict_from_bert'):
+            and hasattr(unwrapped_model[0], 'init_state_dict_from_bert'):
         print_rank_0("Initializing ICT from pretrained BERT model")
         unwrapped_model[0].init_state_dict_from_bert()
         if args.fp16:
@@ -489,7 +489,7 @@ def train_step(forward_step_func, data_iterator,
     if not args.deepspeed:
         if (mpu.is_pipeline_first_stage(ignore_virtual=True) or
             mpu.is_pipeline_last_stage(ignore_virtual=True)) and \
-            mpu.get_pipeline_model_parallel_world_size() > 1:
+                mpu.get_pipeline_model_parallel_world_size() > 1:
             if mpu.is_pipeline_first_stage(ignore_virtual=True):
                 unwrapped_model = model[0]
             elif mpu.is_pipeline_last_stage(ignore_virtual=True):
@@ -543,19 +543,40 @@ def train_step(forward_step_func, data_iterator,
     return {}, skipped_iter, grad_norm, num_zeros_in_grad
 
 
-def training_log(loss_dict, total_loss_dict, learning_rate, iteration,
-                 loss_scale, report_memory_flag, skipped_iter,
-                 grad_norm, params_norm, num_zeros_in_grad,
-                 model=None):
+def tb_wandb_log(
+    key, value, iteration_no, use_wandb, tensorboard_writer=None, all_ranks=False
+):
+    # logs to both tb and wandb (if present) from the zeroth rank. This function belongs to GPT-NeoX
+    do_log = torch.distributed.get_rank() == 0 or all_ranks
+    if do_log and value is not None:
+        if tensorboard_writer:
+            tensorboard_writer.add_scalar(key, value, iteration_no)
+        if use_wandb:
+            wandb.log({key: value}, step=iteration_no)
+
+def training_log(grad_norm, params_norm, num_zeros_in_grad,
+
+                loss_dict,
+                total_loss_dict,
+                learning_rate,
+                iteration,
+                loss_scale,
+                report_memory_flag,
+                skipped_iter,
+                model=None,
+
+                ):
     """Log training information such as losses, timing, ...."""
     args = get_args()
     timers = get_timers()
-    writer = get_tensorboard_writer()
+
+    # writer = get_tensorboard_writer()
 
     # Advanced, skipped, and Nan iterations.
     advanced_iters_key = 'advanced iterations'
     skipped_iters_key = 'skipped iterations'
     nan_iters_key = 'nan iterations'
+
     # Advanced iterations.
     if not skipped_iter:
         total_loss_dict[advanced_iters_key] = total_loss_dict.get(
@@ -563,23 +584,22 @@ def training_log(loss_dict, total_loss_dict, learning_rate, iteration,
     else:
         if advanced_iters_key not in total_loss_dict:
             total_loss_dict[advanced_iters_key] = 0
+
     # Skipped iterations.
     total_loss_dict[skipped_iters_key] = total_loss_dict.get(
         skipped_iters_key, 0) + skipped_iter
+
     # Update losses and set nan iterations
     got_nan = False
     for key in loss_dict:
         if not skipped_iter:
-            total_loss_dict[key] = total_loss_dict.get(
-                key, torch.cuda.FloatTensor([0.0])) + loss_dict[key]
+            total_loss_dict[key] = total_loss_dict.get(key, torch.cuda.FloatTensor([0.0])) + loss_dict[key]
         else:
             value = loss_dict[key].float().sum().item()
-            is_nan = value == float('inf') or \
-                     value == -float('inf') or \
-                     value != value
+            is_nan = value == float('inf') or value == -float('inf') or value != value
             got_nan = got_nan or is_nan
-    total_loss_dict[nan_iters_key] = total_loss_dict.get(
-        nan_iters_key, 0) + int(got_nan)
+
+    total_loss_dict[nan_iters_key] = total_loss_dict.get(nan_iters_key, 0) + int(got_nan)
 
     # Logging.
     timers_to_log = []
@@ -607,65 +627,79 @@ def training_log(loss_dict, total_loss_dict, learning_rate, iteration,
     add_to_logging('batch-generator')
 
     # Calculate batch size.
-    batch_size = args.micro_batch_size * args.data_parallel_size * \
-                 get_num_microbatches()
+    batch_size = args.micro_batch_size * args.data_parallel_size * get_num_microbatches()
 
-    total_iterations = total_loss_dict[advanced_iters_key] + \
-                       total_loss_dict[skipped_iters_key]
+    total_iterations = total_loss_dict[advanced_iters_key] + total_loss_dict[skipped_iters_key]
 
-    # Tensorboard values.
-    if writer and (iteration % args.tensorboard_log_interval == 0) and \
-        is_last_rank():
-        writer.add_scalar('steps-vs-samples/y=steps,x=samples', iteration, args.consumed_train_samples)
-        writer.add_scalar('steps-vs-samples/y=samples,x=steps', args.consumed_train_samples, iteration)
-        writer.add_scalar('steps-vs-tokens/y=steps,x=tokens', iteration, args.consumed_train_tokens)
-        writer.add_scalar('steps-vs-tokens/y=tokens,x=steps', args.consumed_train_tokens, iteration)
+    if (iteration % args.tensorboard_log_interval == 0) and is_last_rank():
+        tb_wandb_log('steps-vs-samples/y=steps,x=samples', iteration, args.consumed_train_samples,
+                     use_wandb=args.use_wandb, tensorboard_writer=args.tensorboard_writer,)
+        tb_wandb_log('steps-vs-samples/y=samples,x=steps',args.consumed_train_samples, iteration,
+                     use_wandb=args.use_wandb, tensorboard_writer=args.tensorboard_writer,)
+        tb_wandb_log('steps-vs-tokens/y=steps,x=tokens', iteration, args.consumed_train_tokens,
+                     use_wandb=args.use_wandb, tensorboard_writer=args.tensorboard_writer, )
+        tb_wandb_log('steps-vs-tokens/y=tokens,x=steps', args.consumed_train_tokens, iteration,
+                     use_wandb=args.use_wandb, tensorboard_writer=args.tensorboard_writer, )
+
         if args.log_learning_rate_to_tensorboard:
-            writer.add_scalar('learning-rate/learning-rate', learning_rate, iteration)
-            writer.add_scalar('learning-rate/learning-rate vs samples', learning_rate,
-                              args.consumed_train_samples)
-            writer.add_scalar('learning-rate/learning-rate vs tokens', learning_rate,
-                              args.consumed_train_tokens)
-        if args.log_batch_size_to_tensorboard:
-            writer.add_scalar('batch-size/batch-size', batch_size, iteration)
-            writer.add_scalar('batch-size/batch-size vs samples', batch_size,
-                              args.consumed_train_samples)
-        for key in loss_dict:
-            writer.add_scalar(f"lm-loss-training/{key}", loss_dict[key], iteration)
-            writer.add_scalar(f"lm-loss-training/{key}" + ' vs samples', loss_dict[key],
-                              args.consumed_train_samples)
-            writer.add_scalar(f"lm-loss-training/{key}" + ' vs tokens', loss_dict[key],
-                              args.consumed_train_tokens)
+            tb_wandb_log('learning-rate/learning-rate', learning_rate, iteration,
+                         use_wandb=args.use_wandb, tensorboard_writer=args.tensorboard_writer, )
+            tb_wandb_log('learning-rate/learning-rate vs samples', learning_rate, args.consumed_train_samples,
+                         use_wandb=args.use_wandb, tensorboard_writer=args.tensorboard_writer, )
+            tb_wandb_log('learning-rate/learning-rate vs tokens', learning_rate, args.consumed_train_tokens,
+                         use_wandb=args.use_wandb, tensorboard_writer=args.tensorboard_writer, )
 
-            writer.add_scalar(f"lm-loss-training/{key}" + ' vs gigaflos (without embeddings)', loss_dict[key],
-                              args.gigaflos_no_embeds)
+        if args.log_batch_size_to_tensorboard:
+            tb_wandb_log('batch-size/batch-size', batch_size, iteration,
+                         use_wandb=args.use_wandb, tensorboard_writer=args.tensorboard_writer, )
+            tb_wandb_log('batch-size/batch-size vs samples', batch_size, args.consumed_train_samples,
+                         use_wandb=args.use_wandb, tensorboard_writer=args.tensorboard_writer, )
+
+        for key in loss_dict:
+            tb_wandb_log(f"lm-loss-training/{key}", loss_dict[key], iteration,
+                         use_wandb=args.use_wandb, tensorboard_writer=args.tensorboard_writer,)
+            tb_wandb_log(f"lm-loss-training/{key}" + ' vs samples', loss_dict[key], args.consumed_train_samples,
+                         use_wandb=args.use_wandb, tensorboard_writer=args.tensorboard_writer,)
+            tb_wandb_log(f"lm-loss-training/{key}" + ' vs tokens', loss_dict[key], args.consumed_train_tokens,
+                         use_wandb=args.use_wandb, tensorboard_writer=args.tensorboard_writer,)
+
+            tb_wandb_log(f"lm-loss-training/{key}" + ' vs gigaflos (without embeddings)', loss_dict[key], args.gigaflos_no_embeds,
+                         use_wandb=args.use_wandb, tensorboard_writer=args.tensorboard_writer,)
+
         if args.log_loss_scale_to_tensorboard and args.fp16:
-            writer.add_scalar('loss-scale/loss-scale', loss_scale, iteration)
-            writer.add_scalar('loss-scale/loss-scale vs samples', loss_scale,
-                              args.consumed_train_samples)
-            writer.add_scalar('loss-scale/loss-scale vs tokens', loss_scale,
-                              args.consumed_train_tokens)
+            tb_wandb_log('loss-scale/loss-scale', loss_scale, iteration,
+                         use_wandb=args.use_wandb, tensorboard_writer=args.tensorboard_writer,)
+            tb_wandb_log('loss-scale/loss-scale vs samples', loss_scale, args.consumed_train_samples,
+                         use_wandb=args.use_wandb, tensorboard_writer=args.tensorboard_writer,)
+            tb_wandb_log('loss-scale/loss-scale vs tokens', loss_scale, args.consumed_train_tokens,
+                         use_wandb=args.use_wandb, tensorboard_writer=args.tensorboard_writer,)
+
         if grad_norm is not None:
-            writer.add_scalar('grad-norm/grad-norm', grad_norm, iteration)
-            writer.add_scalar('grad-norm/grad-norm vs samples', grad_norm,
-                              args.consumed_train_samples)
-            writer.add_scalar('grad-norm/grad-norm vs tokens', grad_norm,
-                              args.consumed_train_tokens)
+            tb_wandb_log('grad-norm/grad-norm', grad_norm, iteration,
+                         use_wandb=args.use_wandb, tensorboard_writer=args.tensorboard_writer,)
+            tb_wandb_log('grad-norm/grad-norm vs samples', grad_norm, args.consumed_train_samples,
+                         use_wandb=args.use_wandb, tensorboard_writer=args.tensorboard_writer,)
+            tb_wandb_log('grad-norm/grad-norm vs tokens', grad_norm, args.consumed_train_tokens,
+                         use_wandb=args.use_wandb, tensorboard_writer=args.tensorboard_writer,)
+
         if num_zeros_in_grad is not None:
-            writer.add_scalar('num-zeros/num-zeros', num_zeros_in_grad, iteration)
-            writer.add_scalar('num-zeros/num-zeros vs samples', num_zeros_in_grad,
-                              args.consumed_train_samples)
-            writer.add_scalar('num-zeros/num-zeros vs tokens', num_zeros_in_grad,
-                              args.consumed_train_tokens)
+            tb_wandb_log('num-zeros/num-zeros', num_zeros_in_grad, iteration,
+                         use_wandb=args.use_wandb, tensorboard_writer=args.tensorboard_writer,)
+            tb_wandb_log('num-zeros/num-zeros vs samples', num_zeros_in_grad, args.consumed_train_samples,
+                         use_wandb=args.use_wandb, tensorboard_writer=args.tensorboard_writer,)
+            tb_wandb_log('num-zeros/num-zeros vs tokens', num_zeros_in_grad, args.consumed_train_tokens,
+                         use_wandb=args.use_wandb, tensorboard_writer=args.tensorboard_writer,)
+
         if params_norm is not None:
-            writer.add_scalar('params-norm/params-norm', params_norm, iteration)
-            writer.add_scalar('params-norm/params-norm vs samples', params_norm,
-                              args.consumed_train_samples)
-            writer.add_scalar('params-norm/params-norm vs tokens', params_norm,
-                              args.consumed_train_tokens)
+            tb_wandb_log('params-norm/params-norm', params_norm, iteration,
+                         use_wandb=args.use_wandb, tensorboard_writer=args.tensorboard_writer,)
+            tb_wandb_log('params-norm/params-norm vs samples', params_norm, args.consumed_train_samples,
+                         use_wandb=args.use_wandb, tensorboard_writer=args.tensorboard_writer,)
+            tb_wandb_log('params-norm/params-norm vs tokens', params_norm, args.consumed_train_tokens,
+                         use_wandb=args.use_wandb, tensorboard_writer=args.tensorboard_writer,)
         if args.curriculum_learning:
-            writer.add_scalar('curriculum_seqlen', args.curriculum_seqlen,
-                              iteration)
+            tb_wandb_log('curriculum_seqlen', args.curriculum_seqlen, iteration,
+                         use_wandb=args.use_wandb, tensorboard_writer=args.tensorboard_writer,)
 
         # It's very questionable what this data contributes, other than huge unstripped file paths
         # as keys and hundreds of TB boards that make the TB files very bloated. So disabling for now.
@@ -673,12 +707,12 @@ def training_log(loss_dict, total_loss_dict, learning_rate, iteration,
         # if args.data_weights is not None:
         #     for prefix, weight in zip(args.data_prefixes, args.data_weights):
         #         name = prefix.split(",")[-1]
-        #         writer.add_scalar(f'samples-per-dataset/{name}', args.consumed_train_samples * weight, args.consumed_train_samples)
-        #         writer.add_scalar(f'steps-per-dataset/{name}', iteration * weight, iteration)
-        #         writer.add_scalar(f'tokens-per-dataset/{name}', args.consumed_train_tokens * weight, args.consumed_train_tokens)
+        #         tb_wandb_log(f'samples-per-dataset/{name}', args.consumed_train_samples * weight, args.consumed_train_samples)
+        #         tb_wandb_log(f'steps-per-dataset/{name}', iteration * weight, iteration)
+        #         tb_wandb_log(f'tokens-per-dataset/{name}', args.consumed_train_tokens * weight, args.consumed_train_tokens)
 
         if args.log_timers_to_tensorboard:
-            timers.write(timers_to_log, writer, iteration,
+            timers.write(timers_to_log, iteration,
                          normalizer=total_iterations)
 
     if iteration % args.log_interval == 0:
@@ -706,29 +740,36 @@ def training_log(loss_dict, total_loss_dict, learning_rate, iteration,
         # Refer to https://github.com/bigscience-workshop/Megatron-DeepSpeed/pull/283#issue-1260805063 for more details.
         coefficient = 32 if args.glu_activation else 24
         flops_per_iteration = (coefficient * checkpoint_activations_factor * batch_size * seq_len * num_layers * (
-            hidden_size ** 2)) * (1. + (seq_len / (6. * hidden_size)) + (
-            vocab_size / (16. * num_layers * hidden_size)))
+                hidden_size ** 2)) * (1. + (seq_len / (6. * hidden_size)) + (
+                vocab_size / (16. * num_layers * hidden_size)))
         tflops = flops_per_iteration / (elapsed_time_per_iteration * args.world_size * (10 ** 12))
 
         # only the last rank process has a non-None _GLOBAL_TENSORBOARD_WRITER
-        if writer and is_last_rank():
+        if is_last_rank():
             if args.log_timers_to_tensorboard:
-                writer.add_scalar('iteration-time/iteration-time',
-                                  elapsed_time_per_iteration, iteration)
-                writer.add_scalar('iteration-time/iteration-time vs samples',
-                                  elapsed_time_per_iteration, args.consumed_train_samples)
-                writer.add_scalar('iteration-time/iteration-time vs tokens',
-                                  elapsed_time_per_iteration, args.consumed_train_tokens)
-                writer.add_scalar('iteration-time/samples per second',
-                                  samples_per_sec, args.iteration)
-                writer.add_scalar('iteration-time/samples per second per replica',
-                                  samples_per_sec_per_replica, args.iteration)
-                writer.add_scalar('iteration-time/tokens per second',
-                                  tokens_per_sec, args.iteration)
-                writer.add_scalar('iteration-time/tokens per second per replica',
-                                  tokens_per_sec_per_replica, args.iteration)
-                writer.add_scalar('iteration-time/TFLOPs per gpu (estimated)',
-                                  tflops, args.iteration)
+                tb_wandb_log('iteration-time/iteration-time', elapsed_time_per_iteration, iteration,
+                         use_wandb=args.use_wandb, tensorboard_writer=args.tensorboard_writer,)
+                tb_wandb_log('iteration-time/iteration-time vs samples',
+                                  elapsed_time_per_iteration, args.consumed_train_samples,
+                         use_wandb=args.use_wandb, tensorboard_writer=args.tensorboard_writer,)
+                tb_wandb_log('iteration-time/iteration-time vs tokens',
+                                  elapsed_time_per_iteration, args.consumed_train_tokens,
+                         use_wandb=args.use_wandb, tensorboard_writer=args.tensorboard_writer,)
+                tb_wandb_log('iteration-time/samples per second',
+                                  samples_per_sec, args.iteration,
+                         use_wandb=args.use_wandb, tensorboard_writer=args.tensorboard_writer,)
+                tb_wandb_log('iteration-time/samples per second per replica',
+                                  samples_per_sec_per_replica, args.iteration,
+                         use_wandb=args.use_wandb, tensorboard_writer=args.tensorboard_writer,)
+                tb_wandb_log('iteration-time/tokens per second',
+                                  tokens_per_sec, args.iteration,
+                         use_wandb=args.use_wandb, tensorboard_writer=args.tensorboard_writer,)
+                tb_wandb_log('iteration-time/tokens per second per replica',
+                                  tokens_per_sec_per_replica, args.iteration,
+                         use_wandb=args.use_wandb, tensorboard_writer=args.tensorboard_writer,)
+                tb_wandb_log('iteration-time/TFLOPs per gpu (estimated)',
+                                  tflops, args.iteration,
+                         use_wandb=args.use_wandb, tensorboard_writer=args.tensorboard_writer,)
 
         log_string = ' iteration {:8d}/{:8d} |'.format(
             iteration, args.train_iters)
@@ -837,10 +878,10 @@ def train(forward_step_func, model, optimizer, lr_scheduler,
 
     while iteration < args.train_iters:
         if (
-            # train_data_iterator is not None
-            args.skip_train_iteration_range is not None
-            and len(args.skip_train_iteration_range) > 0
-            and args.skip_train_iteration_range[0][0] <= iteration + 1 <= args.skip_train_iteration_range[0][1]
+                # train_data_iterator is not None
+                args.skip_train_iteration_range is not None
+                and len(args.skip_train_iteration_range) > 0
+                and args.skip_train_iteration_range[0][0] <= iteration + 1 <= args.skip_train_iteration_range[0][1]
         ):
             start, end = args.skip_train_iteration_range.popleft()
             print_rank_0(f"Skipped iterations {start} to {end} due to --skip-train-iteration-range flag.")
@@ -867,7 +908,7 @@ def train(forward_step_func, model, optimizer, lr_scheduler,
             model[0].set_train_batch_size(global_batch_size)
 
         if args.curriculum_learning and \
-            args.pipeline_model_parallel_size >= 1:
+                args.pipeline_model_parallel_size >= 1:
             args.curriculum_seqlen = args.curriculum_scheduler.update_difficulty( \
                 args.iteration + 1)
         loss_dict, skipped_iter, grad_norm, num_zeros_in_grad = \
@@ -887,7 +928,7 @@ def train(forward_step_func, model, optimizer, lr_scheduler,
         else:
             args.consumed_train_tokens += new_samples * args.seq_length
         args.gigaflos_no_embeds += (
-            6 * new_samples * args.seq_length * get_parameters_in_billions(model, exclude_embeddings=True))
+                6 * new_samples * args.seq_length * get_parameters_in_billions(model, exclude_embeddings=True))
 
         # Logging.
         loss_scale = None
@@ -908,13 +949,13 @@ def train(forward_step_func, model, optimizer, lr_scheduler,
 
         # Autoresume
         if args.adlr_autoresume and \
-            (iteration % args.adlr_autoresume_interval == 0):
+                (iteration % args.adlr_autoresume_interval == 0):
             check_adlr_autoresume_termination(iteration, model, optimizer,
                                               lr_scheduler)
 
         # Evaluation
         if args.eval_interval and iteration % args.eval_interval == 0 and \
-            args.do_valid:
+                args.do_valid:
             prefix = 'iteration {}'.format(iteration)
             names = args.valid_weighted_split_names
             names = names if names is not None else ['valid'] * len(valid_data_iterator)
@@ -926,7 +967,7 @@ def train(forward_step_func, model, optimizer, lr_scheduler,
         # Checkpointing
         saved_checkpoint = False
         if args.save and args.save_interval and \
-            iteration % args.save_interval == 0:
+                iteration % args.save_interval == 0:
             save_checkpoint_and_time(iteration, model, optimizer,
                                      lr_scheduler)
             saved_checkpoint = True
@@ -967,7 +1008,7 @@ def evaluate(forward_step_func, data_iterator, model, verbose=False):
         model_module.eval()
 
     if args.curriculum_learning and \
-        args.pipeline_model_parallel_size >= 1:
+            args.pipeline_model_parallel_size >= 1:
         # When curriculum learning is used with pipeline parallelism, we need
         # this logic to ensure that the eval data is not truncated. If there
         # is a seqlen change due to that, we need to call
@@ -1023,7 +1064,7 @@ def evaluate(forward_step_func, data_iterator, model, verbose=False):
         total_loss_dict[key] /= args.eval_iters * get_num_microbatches()
 
     if args.curriculum_learning and \
-        args.pipeline_model_parallel_size >= 1:
+            args.pipeline_model_parallel_size >= 1:
         # roll back to actual curriculum seqlen at the end of eval.
         args.curriculum_seqlen = args.curriculum_scheduler.update_difficulty( \
             args.iteration + 1)
@@ -1053,27 +1094,35 @@ def evaluate_and_print_results(prefix, forward_step_func,
         ppl = math.exp(min(20, total_loss_dict[key].item()))
         string += '{} PPL: {:.6E} | '.format(key, ppl)
         if writer and is_last_rank():
-            writer.add_scalar(f'{tf_plot_prefix}/{key} validation',
+            tb_wandb_log(f'{tf_plot_prefix}/{key} validation',
                               total_loss_dict[key].item(),
-                              iteration)
-            writer.add_scalar(f'{tf_plot_prefix}/{key} validation vs samples',
+                              iteration,
+                         use_wandb=args.use_wandb, tensorboard_writer=args.tensorboard_writer,)
+            tb_wandb_log(f'{tf_plot_prefix}/{key} validation vs samples',
                               total_loss_dict[key].item(),
-                              args.consumed_train_samples)
-            writer.add_scalar(f'{tf_plot_prefix}/{key} validation vs tokens',
+                              args.consumed_train_samples,
+                         use_wandb=args.use_wandb, tensorboard_writer=args.tensorboard_writer,)
+            tb_wandb_log(f'{tf_plot_prefix}/{key} validation vs tokens',
                               total_loss_dict[key].item(),
-                              args.consumed_train_tokens)
-            writer.add_scalar(f'{tf_plot_prefix}/{key} validation vs gigaflos (without embeddings)',
+                              args.consumed_train_tokens,
+                         use_wandb=args.use_wandb, tensorboard_writer=args.tensorboard_writer,)
+            tb_wandb_log(f'{tf_plot_prefix}/{key} validation vs gigaflos (without embeddings)',
                               total_loss_dict[key].item(),
-                              args.gigaflos_no_embeds)
+                              args.gigaflos_no_embeds,
+                         use_wandb=args.use_wandb, tensorboard_writer=args.tensorboard_writer,)
             if args.log_validation_ppl_to_tensorboard:
-                writer.add_scalar(f'{tf_plot_prefix}/{key} validation ppl', ppl,
-                                  iteration)
-                writer.add_scalar(f'{tf_plot_prefix}/{key} validation ppl vs samples',
-                                  ppl, args.consumed_train_samples)
-                writer.add_scalar(f'{tf_plot_prefix}/{key} validation ppl vs tokens',
-                                  ppl, args.consumed_train_tokens)
-                writer.add_scalar(f'{tf_plot_prefix}/{key} validation ppl vs gigaflos (without embeddings)',
-                                  ppl, args.gigaflos_no_embeds)
+                tb_wandb_log(f'{tf_plot_prefix}/{key} validation ppl', ppl,
+                                  iteration,
+                         use_wandb=args.use_wandb, tensorboard_writer=args.tensorboard_writer,)
+                tb_wandb_log(f'{tf_plot_prefix}/{key} validation ppl vs samples',
+                                  ppl, args.consumed_train_samples,
+                         use_wandb=args.use_wandb, tensorboard_writer=args.tensorboard_writer,)
+                tb_wandb_log(f'{tf_plot_prefix}/{key} validation ppl vs tokens',
+                                  ppl, args.consumed_train_tokens,
+                         use_wandb=args.use_wandb, tensorboard_writer=args.tensorboard_writer,)
+                tb_wandb_log(f'{tf_plot_prefix}/{key} validation ppl vs gigaflos (without embeddings)',
+                                  ppl, args.gigaflos_no_embeds,
+                         use_wandb=args.use_wandb, tensorboard_writer=args.tensorboard_writer,)
 
     length = len(string) + 1
     print_rank_last('-' * length)
@@ -1088,7 +1137,7 @@ def cyclic_iter(iter):
 
 
 def build_train_valid_test_data_iterators(
-    build_train_valid_test_datasets_provider):
+        build_train_valid_test_datasets_provider):
     """XXX"""
     args = get_args()
 
