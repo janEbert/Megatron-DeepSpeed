@@ -1,5 +1,16 @@
 # Docker image for running https://github.com/OpenGPTX/bigscience_megatron_deepspeed
 
+Juwels setup: https://github.com/OpenGPTX/BigScience-Setup
+- torch 1.11 (or does this come from deepspeedmegatron reqs?)
+- cuda 11.5
+
+DFKI setup:
+- cuda 11.6 
+
+Bigscience setup:
+- torch>=1.7
+- cudatoolkit=11.3
+
 
 ## Build
 
