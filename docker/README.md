@@ -26,10 +26,18 @@ docker build -t malteos/obmd:latest -f docker/Dockerfile .
 docker run -it malteos/obmd bash
 
 # run with gpu with `nvidia-docker` executor; specific GPUs with NV_GPU=1,2
-NV_GPU=1,2  nvidia-docker run -it malteos/obmd bash
+NV_GPU=1,2  nvidia-docker run -v $PWD:/app -it malteos/obmd bash
+
+# run original nvidia image
+NV_GPU=1,2  nvidia-docker run -it nvcr.io/nvidia/pytorch:21.12-py3 bash
+
+	
 
 # or with `--gpus all` flag
 docker run --gpus all -it malteos/obmd bash
+
+# push
+docker push malteos/obmd
 
 # run tests
 docker run -malteos/obmd pytest ./tests/test_training_debug.py
