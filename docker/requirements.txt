@@ -11,6 +11,7 @@ isort>=5.5.4
 
 # Already installed in image:
 # torch
+# apex
 
 # Manually installed:
 # DeepSpeed
