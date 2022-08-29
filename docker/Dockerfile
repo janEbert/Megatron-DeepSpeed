@@ -1,11 +1,14 @@
-FROM  nvcr.io/nvidia/pytorch:21.12-py3	
+ARG BASE_TAG=21.12-py3
+ARG BASE_IMAGE=nvcr.io/nvidia/pytorch
+
+FROM $BASE_IMAGE:$BASE_TAG
 # https://docs.nvidia.com/deeplearning/frameworks/pytorch-release-notes/rel_21-12.html#rel_21.12
 # Python 3.8.12
 # NVIDIA CUDA 11.5.0
 # PyTorch 1.11.0a0+b6df043 (pip install torch==1.11.0a0+b6df043)
 USER root
 
-RUN mkdir /app
+RUN mkdir -p /app
 WORKDIR /app
 
 # Install git-lfs for huggingface hub cli
