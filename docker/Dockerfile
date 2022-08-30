@@ -48,14 +48,37 @@ WORKDIR /app
 # Install normal requirements
 
 # Copy requirements first to use cache
-COPY ./docker/requirements.txt /app/docker/requirements.txt
-COPY ./docker/requirements_dev.txt /app/docker/requirements_dev.txt
+COPY ./requirements/requirements.txt ./requirements/requirements.txt
+COPY ./requirements/requirements_dev.txt ./requirements/requirements_dev.txt
 
-RUN pip install -r ./docker/requirements.txt
-RUN pip install -r ./docker/requirements_dev.txt
+# A hacky but working way to exclude deepspeed, apex and torch from the requirements (we install them manually or they are part of base image)
+# See https://github.com/OpenGPTX/BigScience-Setup/blob/main/run_scripts/set_up.bash#L69-L71
+RUN sed -i 's/^[Dd]eep[Ss]peed/# &/' ./requirements/requirements.txt
+RUN sed -i 's/^torch/# &/' ./requirements/requirements.txt
+RUN sed -i 's/^apex/# &/' ./requirements/requirements.txt
+RUN pip install -r ./requirements/requirements.txt
+RUN sed -i 's/^# \([Dd]eep[Ss]peed\)/\1/' ./requirements/requirements.txt
+RUN sed -i 's/^# \(torch\)/\1/' ./requirements/requirements.txt
+RUN sed -i 's/^# \(apex\)/\1/' ./requirements/requirements.txt
+RUN pip install -r ./requirements/requirements_dev.txt
+
+# Install GitHub actions runner
+RUN mkdir -p /actions-runner
+WORKDIR /actions-runner
+RUN curl -o actions-runner-linux-x64-2.295.0.tar.gz -L https://github.com/actions/runner/releases/download/v2.295.0/actions-runner-linux-x64-2.295.0.tar.gz
+RUN echo "a80c1ab58be3cd4920ac2e51948723af33c2248b434a8a20bd9b3891ca4000b6  actions-runner-linux-x64-2.295.0.tar.gz" | shasum -a 256 -c
+RUN tar xzf ./actions-runner-linux-x64-2.295.0.tar.gz
 
 # Copy all other project files
+WORKDIR /app
 COPY . /app
+
+# Create non-root user and give permissions to /app, /actions-runner, and /deepspeed
+RUN useradd -ms /bin/bash docker
+RUN chown -R docker:docker /app
+RUN chown -R docker:docker /actions-runner
+RUN chown -R docker:docker /deepspeed
+USER docker
 
 # expose the Jupyter port 8888
 EXPOSE 8888

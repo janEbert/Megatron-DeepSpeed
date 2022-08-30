@@ -1,3 +1,0 @@
-black==21.4b0
-pytest
-pip-compile-multi
