@@ -4,7 +4,7 @@ import torch
 from pathlib import Path
 from pretrain_gpt import main
 
-from tests.utils import dist_launcher, find_free_port
+from .utils import dist_launcher, find_free_port
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="no cuda available")
 @pytest.mark.parametrize("arg_values", [
