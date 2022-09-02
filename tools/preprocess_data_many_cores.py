@@ -36,7 +36,7 @@ import json
 import logging
 import multiprocessing
 import os
-from pyarrow.parquet import ParquetDataset
+import pyarrow.dataset as ds
 import sys
 import threading
 import time
@@ -237,14 +237,7 @@ def get_args():
 def _read_from_parquet(input_path: str, simple_queue: multiprocessing.Queue, chunk_size: int) -> None:
     if os.path.isdir(input_path) is False:
         logging.warning(f"The dataset is of type PARQUET, but we are only passing a single file via {input_path}.")
-    parquet_dataset_reader = (
-        ParquetDataset(
-            path_or_paths=input_path,
-            memory_map=True
-        )
-        .read()  # Generates PyArrow table
-        .to_reader(max_chunksize=chunk_size)  # Converts the table to a RecordBatchReader
-    )
+    parquet_dataset_reader = ds.dataset(input_path, format="parquet").to_batches(batch_size=chunk_size)
     for batch in parquet_dataset_reader:
         batch = tuple(
             json.dumps(item) for item in batch.to_pylist()
