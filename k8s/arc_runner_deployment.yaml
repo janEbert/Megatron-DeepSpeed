@@ -5,6 +5,7 @@ metadata:
   name: action-runner-deploymment
   namespace: project-ns-opengptx
 spec:
+  replicas: 0
   template:
     spec:
       repository: OpenGPTX/bigscience_megatron_deepspeed
@@ -38,10 +39,13 @@ metadata:
 spec:
   minReplicas: 0
   maxReplicas: 1
+
+  scaleDownDelaySecondsAfterScaleOut: 120
   scaleTargetRef:
     kind: RunnerDeployment
     name: action-runner-deploymment
-  scaleUpTriggers:
-    - githubEvent:
-        workflowJob: {}
-      duration: "30m"
+
+  metrics:
+  - type: TotalNumberOfQueuedAndInProgressWorkflowRuns
+    repositoryNames:
+    - OpenGPTX/bigscience_megatron_deepspeed
