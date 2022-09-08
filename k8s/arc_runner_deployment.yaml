@@ -9,6 +9,7 @@ spec:
   template:
     spec:
       repository: OpenGPTX/bigscience_megatron_deepspeed
+      ephemeral: true
 
         #image: hub.cc-asp.fraunhofer.de/dockerhub_proxy_cache/library/nginx:latest
         #imagePullPolicy: Always
@@ -21,8 +22,6 @@ spec:
           cpu: 3            #<-- same value for requests and limits
           memory: "5Gi"    
           nvidia.com/gpu: 1	#Assign integer values. GPU has no fraction values.
-
-      ephemeral: true
 
       tolerations:
       - key: "nvidia.com"
