@@ -33,8 +33,11 @@ export BASE_TAG=22.08-py3
 git clone https://github.com/OpenGPTX/bigscience_megatron_deepspeed.git
 cd bigscience_megatron_deepspeed
 
+# activate docker buildkit for multi-stage build
+export DOCKER_BUILDKIT=1
+
 # build
-docker build -t malteos/obmd:$BASE_TAG  --build-arg BASE_TAG=$BASE_TAG -f docker/Dockerfile .
+docker build -t malteos/obmd:$BASE_TAG --target main --build-arg BASE_TAG=$BASE_TAG -f docker/Dockerfile .
 
 # push
 docker push malteos/obmd:$BASE_TAG
@@ -67,8 +70,19 @@ docker run --gpus all -it malteos/obmd:$BASE_TAG bash
 docker run -it malteos/obmd:$BASE_TAG pytest ./tests/test_training_debug.py
 
 NV_GPU=1,2  nvidia-docker run -it malteos/obmd:${BASE_TAG}-torch_1-12-1  pytest ./tests/test_training_debug.py
+```
 
 
+## Build image for Github actions runner
+
+This image include extra files for Github's CICD runner and a different starting command.
+
+```bash
+# activate docker buildkit for multi-stage build
+export DOCKER_BUILDKIT=1
+
+# build
+docker build -t malteos/obmd:${BASE_TAG}-runner --target actions_runner --build-arg BASE_TAG=$BASE_TAG -f docker/Dockerfile .
 ```
 
 
@@ -106,8 +120,11 @@ This is needed when our wanted PyTorch version is not provided by NVIDIA base im
 export BASE_TAG=21.12-py3
 export BASE_IMAGE=malteos/nvidia-pytorch
 
+# activate docker buildkit for multi-stage build
+export DOCKER_BUILDKIT=1
+
 # base image
-docker build -t $BASE_IMAGE:${BASE_TAG}-torch_1-12-1  --build-arg BASE_TAG=$BASE_TAG --build-arg TORCH_VERSION=1.12.1 -f docker/custom_pytorch.Dockerfile .
+docker build -t $BASE_IMAGE:${BASE_TAG}-torch_1-12-1 --build-arg BASE_TAG=$BASE_TAG --build-arg TORCH_VERSION=1.12.1 -f docker/custom_pytorch.Dockerfile .
 docker run -it $BASE_IMAGE:${BASE_TAG}-torch_1-12-1 bash
 docker push $BASE_IMAGE:${BASE_TAG}-torch_1-12-1
 

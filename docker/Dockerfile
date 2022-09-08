@@ -1,7 +1,8 @@
+# syntax=docker/dockerfile:1
 ARG BASE_TAG=21.12-py3
 ARG BASE_IMAGE=nvcr.io/nvidia/pytorch
 
-FROM $BASE_IMAGE:$BASE_TAG
+FROM $BASE_IMAGE:$BASE_TAG AS main
 # https://docs.nvidia.com/deeplearning/frameworks/pytorch-release-notes/rel_21-12.html#rel_21.12
 # Python 3.8.12
 # NVIDIA CUDA 11.5.0
@@ -62,21 +63,13 @@ RUN sed -i 's/^# \(torch\)/\1/' ./requirements/requirements.txt
 RUN sed -i 's/^# \(apex\)/\1/' ./requirements/requirements.txt
 RUN pip install -r ./requirements/requirements_dev.txt
 
-# Install GitHub actions runner
-RUN mkdir -p /actions-runner
-WORKDIR /actions-runner
-RUN curl -o actions-runner-linux-x64-2.295.0.tar.gz -L https://github.com/actions/runner/releases/download/v2.295.0/actions-runner-linux-x64-2.295.0.tar.gz
-RUN echo "a80c1ab58be3cd4920ac2e51948723af33c2248b434a8a20bd9b3891ca4000b6  actions-runner-linux-x64-2.295.0.tar.gz" | shasum -a 256 -c
-RUN tar xzf ./actions-runner-linux-x64-2.295.0.tar.gz
-
 # Copy all other project files
 WORKDIR /app
 COPY . /app
 
-# Create non-root user and give permissions to /app, /actions-runner, and /deepspeed
+# Create non-root user and give permissions to /app, and /deepspeed
 RUN useradd -ms /bin/bash docker
 RUN chown -R docker:docker /app
-RUN chown -R docker:docker /actions-runner
 RUN chown -R docker:docker /deepspeed
 USER docker
 
@@ -91,3 +84,30 @@ RUN python -c "import torch; print(torch.__version__); print(torch.version.cuda)
 # RUN ds_report
 
 CMD ["jupyter", "notebook"]
+
+
+# Build image with github actions runner on top of the normal image
+FROM main AS actions_runner
+ARG RUNNER_VERSION=2.295.0
+ARG CONTROLLER_VERSION=0.25.2
+
+# Install runner's files
+USER root
+RUN mkdir -p /actions-runner /runner
+WORKDIR /actions-runner
+RUN curl -O -L https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz \
+    && tar xzf ./actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz \
+    && rm ./actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz \
+    && DEBIAN_FRONTEND=noninteractive ./bin/installdependencies.sh \
+    && chmod +x config.sh
+
+# Download specific script for the actions-runner-controller
+RUN curl -O -L https://raw.githubusercontent.com/actions-runner-controller/actions-runner-controller/v${CONTROLLER_VERSION}/runner/entrypoint.sh \
+    && curl -O -L https://raw.githubusercontent.com/actions-runner-controller/actions-runner-controller/v${CONTROLLER_VERSION}/runner/logger.bash \
+    && chmod +x entrypoint.sh
+
+# Make sure non-root user can start the runner
+RUN chown -R docker:docker /actions-runner /runner
+USER docker
+
+CMD ["./entrypoint.sh"]
