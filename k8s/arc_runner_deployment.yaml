@@ -11,8 +11,8 @@ spec:
       repository: OpenGPTX/bigscience_megatron_deepspeed
       ephemeral: true
 
-        #image: hub.cc-asp.fraunhofer.de/dockerhub_proxy_cache/library/nginx:latest
-        #imagePullPolicy: Always
+      image: hub.cc-asp.fraunhofer.de/dockerhub_proxy_cache/malteos/obmd:22.08-py3-runner
+      imagePullPolicy: Always
       resources:
         requests:
           cpu: 3            #<-- same value for requests and limits
