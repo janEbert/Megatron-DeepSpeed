@@ -17,3 +17,6 @@ jobs:
 
       - name: GPU check
         run: nvidia-smi
+
+      - name: Full check
+        run: pytest tests/test_training_debug.py
