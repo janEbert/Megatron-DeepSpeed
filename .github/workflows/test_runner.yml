@@ -19,4 +19,8 @@ jobs:
         run: nvidia-smi
 
       - name: Full check
-        run: pytest tests/test_training_debug.py
+        run: |
+          id
+          pwd
+          ll /opt/conda/bin/pytest
+          pytest tests/test_training_debug.py
