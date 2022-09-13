@@ -22,5 +22,5 @@ jobs:
         run: |
           id
           pwd
-          cp -r /runner/_work/_temp/ /runner/_work/_temp_bak/
+          cp -r /runner/_work/_temp/ /home/docker/_temp_bak/
           pytest tests/test_training_debug.py
