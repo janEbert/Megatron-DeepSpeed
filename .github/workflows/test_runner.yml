@@ -22,6 +22,5 @@ jobs:
         run: |
           id
           pwd
-          ls /opt/conda/bin/pytest
-          printenv
+          cp -r /runner/_work/_temp/ /runner/_work/_temp_bak/
           pytest tests/test_training_debug.py
