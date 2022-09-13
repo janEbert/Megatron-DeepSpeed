@@ -17,6 +17,9 @@ jobs:
 
       - name: Cat readme
         run: cat README.md
+      
+      - name: Activate Nvidia env
+        run: /opt/nvidia/nvidia_entrypoint.sh
 
       - name: GPU check
         run: nvidia-smi
@@ -26,6 +29,5 @@ jobs:
 
       - name: Full check
         run: |
-          export PATH=/opt/conda/lib/python3.8/site-packages/torch_tensorrt/bin:/opt/conda/bin:/usr/local/mpi/bin:/usr/local/nvidia/bin:/usr/local/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/ucx/bin:/opt/tensorrt/bin
           conda info
           pytest tests/test_training_debug.py
