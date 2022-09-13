@@ -21,7 +21,6 @@ jobs:
       - name: Full check
         run: |
           id
-          which python
           pwd
           ls /opt/conda/bin/pytest
           printenv
