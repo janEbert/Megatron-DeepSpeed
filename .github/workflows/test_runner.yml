@@ -21,6 +21,8 @@ jobs:
       - name: Full check
         run: |
           id
+          which python
           pwd
-          ll /opt/conda/bin/pytest
+          ls /opt/conda/bin/pytest
+          printenv
           pytest tests/test_training_debug.py
