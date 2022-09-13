@@ -26,5 +26,5 @@ jobs:
 
       - name: Full check
         run: |
-          python --version
+          conda info
           /opt/conda/bin/pytest tests/test_training_debug.py
