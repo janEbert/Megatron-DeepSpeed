@@ -20,7 +20,6 @@ jobs:
 
       - name: Full check
         run: |
-          id
-          pwd
-          cp -r /runner/_work/_temp/ /home/docker/_temp_bak/
+          printenv
+          echo $PATH
           /opt/conda/bin/pytest tests/test_training_debug.py
