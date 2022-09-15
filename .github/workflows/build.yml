@@ -1,7 +1,12 @@
 name: build docker image
 
-on: [push]
-
+on: 
+  push: # Trigger workflow only on push events
+    branches: # ... for these branches
+      - main
+      - add_dockerfile
+    tags: # and if event has a tag including hierarchical tags like v1.0/beta
+      - '**' 
 jobs:
   build-docker:
     name: build docker container

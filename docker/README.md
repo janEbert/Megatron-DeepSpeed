@@ -37,17 +37,17 @@ cd bigscience_megatron_deepspeed
 export DOCKER_BUILDKIT=1
 
 # build
-docker build -t malteos/obmd:$BASE_TAG --target main --build-arg BASE_TAG=$BASE_TAG -f docker/Dockerfile .
+docker build -t ghcr.io/opengptx/obmd:$BASE_TAG --target main --build-arg BASE_TAG=$BASE_TAG -f docker/Dockerfile .
 
 # push
-docker push malteos/obmd:$BASE_TAG
+docker push ghcr.io/opengptx/obmd:$BASE_TAG
 
 # tag and push with git hash
 COMMIT_HASH=$(git rev-parse --short HEAD)
 COMMIT_TAG=${BASE_TAG}-${COMMIT_HASH}
 
-docker tag malteos/obmd:$BASE_TAG malteos/obmd:$COMMIT_TAG
-docker push malteos/obmd:$COMMIT_TAG
+docker tag ghcr.io/opengptx/obmd:$BASE_TAG ghcr.io/opengptx/obmd:$COMMIT_TAG
+docker push ghcr.io/opengptx/obmd:$COMMIT_TAG
 ```
 
 
@@ -55,21 +55,21 @@ docker push malteos/obmd:$COMMIT_TAG
 
 ```bash
 # run bash
-docker run -it malteos/obmd:$BASE_TAG bash
+docker run -it ghcr.io/opengptx/obmd:$BASE_TAG bash
 
 # run with gpu with `nvidia-docker` executor; specific GPUs with NV_GPU=1,2
-NV_GPU=1,2  nvidia-docker run -v $PWD:/app -it malteos/obmd:$BASE_TAG bash
+NV_GPU=1,2  nvidia-docker run -v $PWD:/app -it ghcr.io/opengptx/obmd:$BASE_TAG bash
 
 # run original nvidia image (for testing)
 NV_GPU=1,2  nvidia-docker run -it nvcr.io/nvidia/pytorch:$BASE_TAG bash
 
 # or with `--gpus all` flag
-docker run --gpus all -it malteos/obmd:$BASE_TAG bash
+docker run --gpus all -it ghcr.io/opengptx/obmd:$BASE_TAG bash
 
 # run tests
-docker run -it malteos/obmd:$BASE_TAG pytest ./tests/test_training_debug.py
+docker run -it ghcr.io/opengptx/obmd:$BASE_TAG pytest ./tests/test_training_debug.py
 
-NV_GPU=1,2  nvidia-docker run -it malteos/obmd:${BASE_TAG}-torch_1-12-1  pytest ./tests/test_training_debug.py
+NV_GPU=1,2  nvidia-docker run -it ghcr.io/opengptx/obmd:${BASE_TAG}-torch_1-12-1  pytest ./tests/test_training_debug.py
 ```
 
 
@@ -82,7 +82,7 @@ This image include extra files for Github's CICD runner and a different starting
 export DOCKER_BUILDKIT=1
 
 # build
-docker build -t malteos/obmd:${BASE_TAG}-runner --target actions_runner --build-arg BASE_TAG=$BASE_TAG -f docker/Dockerfile .
+docker build -t ghcr.io/opengptx/obmd:${BASE_TAG}-runner --target actions_runner --build-arg BASE_TAG=$BASE_TAG -f docker/Dockerfile .
 ```
 
 
