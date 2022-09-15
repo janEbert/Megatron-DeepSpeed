@@ -8,6 +8,9 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: true
+      matrix: 
+        base-tag: ["22.08-py3", "21.12-py3"]
+        target: ["main", "actions_runner"]
     permissions:
       contents: read
       packages: write
@@ -33,7 +36,7 @@ jobs:
           images: |
             ghcr.io/opengptx/obmd
           tags: |
-            type=raw,value=latest
+            type=raw,value=${{ matrix.base-tag }}-${{ matrix.target}}
             type=raw,value=${{ github.run_id }}
             type=ref,event=branch
             type=ref,event=tag
@@ -46,7 +49,8 @@ jobs:
         with:
           context: .
           file: ./docker/Dockerfile
-          build-args: BASE_TAG=22.08-py3
+          build-args: BASE_TAG=${{ matrix.base-tag }}
+          target: ${{ matrix.target}}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
