@@ -10,17 +10,22 @@ spec:
     spec:
       repository: OpenGPTX/bigscience_megatron_deepspeed
       ephemeral: true
+      dockerEnabled: false
+
+      env:
+      - name: RUNNER_ASSETS_DIR
+        value: "/actions-runner"
 
       image: hub.cc-asp.fraunhofer.de/dockerhub_proxy_cache/malteos/obmd:22.08-py3-runner
       imagePullPolicy: Always
       resources:
         requests:
           cpu: 3            #<-- same value for requests and limits
-          memory: "5Gi"    
+          memory: "10Gi"    
           nvidia.com/gpu: 1	#Assign the same values for GPU requests and limits.
         limits:
           cpu: 3            #<-- same value for requests and limits
-          memory: "5Gi"    
+          memory: "10Gi"    
           nvidia.com/gpu: 1	#Assign integer values. GPU has no fraction values.
 
       tolerations:
