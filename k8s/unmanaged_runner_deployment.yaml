@@ -1,0 +1,39 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: unmanaged-github-runner
+  namespace: project-ns-opengptx
+spec:
+  containers:
+  - name: runner-container
+    image: hub.cc-asp.fraunhofer.de/dockerhub_proxy_cache/library/nginx:latest    #<-- Your docker image
+    env:
+      - name: REPO_URL
+        value: "https://github.com/OpenGPTX/bigscience_megatron_deepspeed"
+      - name: REG_TOKEN
+        value: "ADMDER2UAJZ57H57SOUUXXXXXXXXX"  # Setting > Actions > Runners > New self-hosted runner
+
+    command: ["/bin/sh", "-c"]
+    args:       #<-- Command to run in container. Override docker's default entry point
+      - useradd -m runner && cd /home/runner;
+        mkdir actions-runner && cd actions-runner;
+        curl -o actions-runner-linux-x64-2.295.0.tar.gz -L https://github.com/actions/runner/releases/download/v2.295.0/actions-runner-linux-x64-2.295.0.tar.gz;
+        echo "a80c1ab58be3cd4920ac2e51948723af33c2248b434a8a20bd9b3891ca4000b6  actions-runner-linux-x64-2.295.0.tar.gz" | shasum -a 256 -c;
+        tar xzf ./actions-runner-linux-x64-2.295.0.tar.gz;
+        su runner -c "cd /home/runner/actions-runner && ./config.sh --unattended --ephemeral --url $(REPO_URL) --token $(REG_TOKEN); ./run.sh"
+
+    resources:
+      requests:
+        cpu: 3            #<-- same value for requests and limits
+        memory: "5Gi"    
+        nvidia.com/gpu: 1	#Assign the same values for GPU requests and limits.
+      limits:
+        cpu: 3            #<-- same value for requests and limits
+        memory: "5Gi"    
+        nvidia.com/gpu: 1	#Assign integer values. GPU has no fraction values.
+
+  tolerations:
+  - key: "nvidia.com"
+    operator: "Equal"
+    value: "a100"
+    effect: "NoSchedule"
