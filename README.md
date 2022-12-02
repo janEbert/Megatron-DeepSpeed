@@ -42,7 +42,20 @@ pip install --global-option="--cpp_ext" --global-option="--cuda_ext" --no-cache 
 
 (on JZ it's done in a special way, see [here](https://github.com/bigscience-workshop/bigscience/tree/master/jz/envs#apex).)
 
-3. (Optional) Install `deepspeed`
+3. (Optional) Set up a remote ssh-interpreter for Pycharm
+You can use ssh-interpreter in Pycharm to connect to an environment that you set up on a remote server. 
+To make Pycharm use your created Conda environment also during the compilation of C++ modules, create the following 
+shell-script on the remote server:
+```
+#!/bin/bash
+source /path/to/your/conda/installation/etc/profile.d/conda.sh
+conda activate /path/to/your/conda/installation/envs/open-gptx-bigscience
+
+python "$@"
+```
+Now you can create an ssh interpreter in Pycharm and use this shell script as the interpreter. 
+
+4. (Optional) Install `deepspeed`
 
 ```
 git clone https://github.com/microsoft/deepspeed
@@ -56,7 +69,7 @@ adjust `TORCH_CUDA_ARCH_LIST="7.0"` to the architecture of your NVIDIA GPU (or j
 (on JZ it's done in a special way, see [here](https://github.com/bigscience-workshop/bigscience/tree/master/jz/envs#deepspeed).)
 
 
-3. (Optional) CUDA kernels compilation
+4. (Optional) CUDA kernels compilation
 
 The first time you run the training scripts several CUDA kernels will be compiled. Which means you need to have a cuda environment set up in your environment and it should match the version pytorch was built with.
 
