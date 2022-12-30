@@ -89,10 +89,13 @@ def model_provider(pre_process=True, post_process=True):
 
 from megatron.global_vars import get_tokenizer
 def visualize_model_inputs(tokens, attention_mask, labels, loss_mask):
+    print("SHAPES", tokens.shape, attention_mask.shape, labels.shape, loss_mask.shape)
     tok = get_tokenizer()
-    print("TOKENS:", ",".join([tok.detokenize(tokens[0, i]) for i in range(100)]))
-    print("ATTN:", attention_mask[0, :, :100, :100])
-    print("LABS:", labels[0, :100])
+
+    print("TOKENS:", tok.detokenize(tokens[0, :].cpu().numpy().tolist()))
+    print("LABELS:", tok.detokenize(labels[0, :].cpu().numpy().tolist()))
+
+    print("ATTN:", attention_mask[:100])
     print("LOSSMSK:", loss_mask[:100])
 
 def get_batch_pipe(data):
@@ -107,14 +110,14 @@ def get_batch_pipe(data):
     data_b = mpu.broadcast_data(keys, data, datatype)    
     
 
-    print(
-        visualize_model_inputs(
-            data_b['text'],
-            data_b['dec_mask'],
-            data_b['labels'],
-            data_b['loss_mask'],
-        )
-    )
+    # print(
+    #     visualize_model_inputs(
+    #         data_b['text'],
+    #         data_b['dec_mask'],
+    #         data_b['labels'],
+    #         data_b['loss_mask'],
+    #     )
+    # )
 
     tokens = data_b['text'].long()
     labels = data_b['labels'].long()

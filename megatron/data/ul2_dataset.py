@@ -277,9 +277,16 @@ def build_training_sample(sample, target_seq_length,
         loss_mask = np.zeros(len(tokens), dtype=np.int64)
         loss_mask[-num_labels:] = 1
 
+        padding = [pad_id] * (max_seq_length - len(tokens))
+        tokens = np.concatenate((tokens, padding), axis=0)
+        labels = np.concatenate((labels, padding), axis=0)
+        loss_mask = np.concatenate((loss_mask, np.zeros(len(padding), dtype=np.int64)), axis=0)
+
         dec_mask = make_history_mask(tokens)
         if is_prefix_lm(model_type):
-            dec_mask[:-num_labels, :-num_labels] = 1
+            dec_mask[
+                :-num_labels-len(padding), :-num_labels-len(padding)
+            ] = 1
 
         train_sample = {
             'text': tokens,
@@ -288,6 +295,7 @@ def build_training_sample(sample, target_seq_length,
             'truncated': int(truncated),
             'dec_mask': dec_mask,
         }
+
     else:
         # Padding.
         tokens_enc, tokens_dec_in, labels, enc_mask, \
