@@ -155,8 +155,8 @@ def _build_single_datasets(data_prefix, range_string, data_impl, train_valid_tes
             documents = np.arange(start=splits[0], stop=splits[1],
                                   step=1, dtype=np.int32)
 
+            args = get_args()
             if args.ul2_model_type:
-                args = get_args()
                 dataset = UL2Dataset(
                     name=name,
                     data_prefix=data_prefix,
