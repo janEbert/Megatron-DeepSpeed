@@ -230,6 +230,7 @@ def forward_step(data_iterator, model):
 def train_valid_test_datasets_provider(train_val_test_num_samples):
     """Build train, valid, and test datasets."""
     args = get_args()
+    train_ds, valid_ds, test_ds = None, None, None
 
     print_rank_0('> building train, validation, and test datasets '
                  'for UL2 ...')
@@ -246,7 +247,6 @@ def train_valid_test_datasets_provider(train_val_test_num_samples):
             seed=args.seed,
             skip_warmup=(not args.mmap_warmup),
             dataset_type='ul2')
-        print_rank_0("> finished creating UL2 datasets ...")
     elif args.train_weighted_split_paths:
         assigned_train_valid_test = []
         if args.train_weighted_split_paths is not None:
@@ -275,6 +275,8 @@ def train_valid_test_datasets_provider(train_val_test_num_samples):
     else:
         raise NotImplementedError("No dataloading argument passed")                           
 
+    print_rank_0("> finished creating UL2 datasets ...")
+    
     return train_ds, valid_ds, test_ds
 
 
