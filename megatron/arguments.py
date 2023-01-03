@@ -485,6 +485,10 @@ def _add_regularization_args(parser):
     group.add_argument('--adan-beta3', type=float, default=0.99,
                        help='Third coefficient for computing running averages '
                        'of gradient, its difference, and Nesterov velocity')
+    group.add_argument('--adan-no-foreach', action='store_false',
+                       help='Whether to use PyTorch-internal functions for '
+                       'performance. Faster but consumes more memory.',
+                       dest='adan_foreach')
 
     return parser
 

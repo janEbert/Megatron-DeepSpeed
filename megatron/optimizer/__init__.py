@@ -99,8 +99,7 @@ def get_megatron_optimizer(model):
             weight_decay=args.weight_decay,
             betas=(args.adan_beta1, args.adan_beta2, args.adan_beta3),
             eps=args.adam_eps,
-            # Faster but uses more memory.
-            foreach=True,
+            foreach=args.adan_foreach,
         )
     else:
         raise Exception('{} optimizer is not supported.'.format(
