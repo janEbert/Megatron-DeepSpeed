@@ -471,11 +471,20 @@ def _add_regularization_args(parser):
     group.add_argument('--adam-beta2', type=float, default=0.999,
                        help='Second coefficient for computing running averages '
                        'of gradient and its square')
-    group.add_argument('--adam-eps', type=float, default=1e-08,
+    group.add_argument('--adam-eps', '--adan-eps', type=float, default=1e-08,
                        help='Term added to the denominator to improve'
                        'numerical stability')
     group.add_argument('--sgd-momentum', type=float, default=0.9,
                        help='Momentum factor for sgd')
+    group.add_argument('--adan-beta1', type=float, default=0.98,
+                       help='First coefficient for computing running averages '
+                       'of gradient, its difference, and Nesterov velocity')
+    group.add_argument('--adan-beta2', type=float, default=0.92,
+                       help='Second coefficient for computing running averages '
+                       'of gradient, its difference, and Nesterov velocity')
+    group.add_argument('--adan-beta3', type=float, default=0.99,
+                       help='Third coefficient for computing running averages '
+                       'of gradient, its difference, and Nesterov velocity')
 
     return parser
 
@@ -550,7 +559,7 @@ def _add_training_args(parser):
                        help='Disable bias and dropout fusion.',
                        dest='bias_dropout_fusion')
     group.add_argument('--optimizer', type=str, default='adam',
-                       choices=['adam', 'sgd'],
+                       choices=['adam', 'sgd', 'adan'],
                        help='Optimizer function')
     group.add_argument('--use-bnb-optimizer', action='store_true',
                        help='Use bitsandbytes optimizer for efficient training,'
