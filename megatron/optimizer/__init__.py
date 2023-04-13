@@ -91,7 +91,7 @@ def get_megatron_optimizer(model):
             raise ImportError(
                 'to use the Adan optimizer, please execute '
                 '`python3 -m pip install '
-                'git+https://github.com/sail-sq/Adan.git`'
+                'git+https://github.com/sail-sg/Adan.git`'
             )
         optimizer = Adan(
             param_groups,
