@@ -100,6 +100,7 @@ def get_megatron_optimizer(model):
             betas=(args.adan_beta1, args.adan_beta2, args.adan_beta3),
             eps=args.adam_eps,
             foreach=args.adan_foreach,
+            fused=args.adan_fused,
         )
     else:
         raise Exception('{} optimizer is not supported.'.format(

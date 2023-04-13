@@ -489,6 +489,10 @@ def _add_regularization_args(parser):
                        help='Whether to use PyTorch-internal functions for '
                        'performance. Faster but consumes more memory.',
                        dest='adan_foreach')
+    group.add_argument('--adan-no-fused', action='store_false',
+                       help='Whether to use fused Adan for decreased memory '
+                       'requirements and increased throughput.',
+                       dest='adan_fused')
 
     return parser
 
