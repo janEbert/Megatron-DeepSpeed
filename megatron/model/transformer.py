@@ -26,6 +26,7 @@ from megatron.enums import AttnMaskType, LayerType, AttnType, PositionEmbeddingT
 from megatron.model.fused_layer_norm import MixedFusedLayerNorm as LayerNorm
 from megatron.model.fused_softmax import FusedScaleMaskSoftmax
 from megatron.model.fused_bias_gelu import bias_gelu_impl
+from megatron.model.hyena_standalone import ParallelHyena
 from megatron.model.utils import attention_mask_func, openai_gelu, erf_gelu
 
 import deepspeed
@@ -497,12 +498,21 @@ class ParallelTransformerLayer(MegatronModule):
             eps=args.layernorm_epsilon)
 
         # Self attention.
-        self.self_attention = ParallelAttention(
-            init_method,
-            output_layer_init_method,
-            layer_number,
-            attention_type=AttnType.self_attn,
-            attn_mask_type=self_attn_mask_type)
+        if args.use_hyena and self_attn_mask_type is AttnMaskType.causal:
+            self.self_attention = ParallelHyena(
+                init_method,
+                output_layer_init_method,
+                layer_number,
+                attention_type=AttnType.self_attn,
+                attn_mask_type=self_attn_mask_type,
+            )
+        else:
+            self.self_attention = ParallelAttention(
+                init_method,
+                output_layer_init_method,
+                layer_number,
+                attention_type=AttnType.self_attn,
+                attn_mask_type=self_attn_mask_type)
         self.hidden_dropout = args.hidden_dropout
         self.bias_dropout_fusion = args.bias_dropout_fusion
 
