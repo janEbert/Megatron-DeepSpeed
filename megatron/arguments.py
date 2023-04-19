@@ -56,6 +56,7 @@ def parse_args(
     parser = _add_autoresume_args(parser)
     parser = _add_biencoder_args(parser)
     parser = _add_vit_args(parser)
+    parser = _add_hyena_args(parser)
     parser = _add_ul2_args(parser)
     parser = _add_logging_args(parser)
     parser = _add_zero_args(parser)
@@ -436,6 +437,63 @@ def _add_network_size_args(parser):
     group.add_argument('--log-level-replica', type=str, choices=list(log_levels.keys()),
                        help="Logger log level to use on replicas. Same choices as ``log_level``"
                        )
+    return parser
+
+
+def _add_hyena_args(parser):
+    group = parser.add_argument_group(title='Hyena')
+
+    group.add_argument('--use-hyena', action='store_true',
+                       help='Whether to replace attention layers with Hyenas.')
+    group.add_argument('--hyena-order', type=int, default=2,
+                       help='Number of Hyena output projections.')
+    group.add_argument('--hyena-filter-order', type=int, default=64,
+                       help='Width of the Hyena implicit filter FFN.')
+    group.add_argument('--hyena-dropout', type=float, default=0.0,
+                       help='Dropout before applying Hyena filter.')
+    group.add_argument('--hyena-filter-dropout', type=float, default=0.0,
+                       help='NO EFFECT.')
+    group.add_argument('--hyena-emb-dim', type=int, default=3,
+                       help='Embedding dimension of the Hyena positional '
+                       'encoding.')
+    group.add_argument('--hyena-fused-fft-conv', action='store_true',
+                       help='NO EFFECT. Whether to use a fused FFTConv '
+                       'implementation for Hyena.')
+    group.add_argument('--hyena-lr', type=float, default=None,
+                       help='Learning rate for the Hyena implicit filter. '
+                       'If not given, use `--lr`. (Hyena default: 1e-3)')
+    group.add_argument('--hyena-pos-emb-lr', type=float, default=None,
+                       help='Learning rate for the Hyena positional '
+                       'embedding. If not given, use `--lr`. '
+                       '(Hyena default: 1e-5)')
+    group.add_argument('--hyena-activation-frequency', type=float, default=1.0,
+                       help='Frequency for the Hyena implicit filter '
+                       'activations.')
+    group.add_argument('--hyena-weight-decay', type=float, default=0.0,
+                       help='Weight decay for the Hyena implicit filter '
+                       'parameters.')
+    group.add_argument('--hyena-no-bias', action='store_false',
+                       help='Weight decay for the Hyena implicit filter '
+                       'parameters.', dest='hyena_bias')
+    group.add_argument('--hyena-num-inner-mlps', type=int, default=2,
+                       help='Number of linear layers for Hyena implicit '
+                       'filter.')
+    group.add_argument('--hyena-normalized', action='store_true',
+                       help='NO EFFECT.')
+    group.add_argument('--hyena-fast-decay-pct', type=float, default=0.3,
+                       help='Inverse scale of maximum Hyena modulation decay.')
+    group.add_argument('--hyena-slow-decay-pct', type=float, default=1.5,
+                       help='Inverse scale of minimum Hyena modulation decay.')
+    group.add_argument('--hyena-modulation-target', type=float, default=1e-2,
+                       help='Hyena modulation target decay value.')
+    group.add_argument('--hyena-modulation-lr', type=float, default=0.0,
+                       help='Learning rate for Hyena modulation.')
+    group.add_argument('--hyena-no-modulate', action='store_false',
+                       help='Whether to apply modulation to Hyena.',
+                       dest='hyena_modulate')
+    group.add_argument('--hyena-shift', type=float, default=0.0,
+                       help='How much to shift/delay the Hyena decay signal.')
+
     return parser
 
 
