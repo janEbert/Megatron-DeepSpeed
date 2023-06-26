@@ -56,6 +56,10 @@ dill==0.3.5.1
     #   -c requirements/_all.txt
     #   datasets
     #   multiprocess
+einops==0.6.1
+    # via
+    #   -c requirements/_all.txt
+    #   -r requirements/requirements.in
 filelock==3.7.1
     # via
     #   -c requirements/_all.txt
