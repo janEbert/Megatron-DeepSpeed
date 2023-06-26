@@ -26,7 +26,7 @@ from megatron.enums import AttnMaskType, LayerType, AttnType, PositionEmbeddingT
 from megatron.model.fused_layer_norm import MixedFusedLayerNorm as LayerNorm
 from megatron.model.fused_softmax import FusedScaleMaskSoftmax
 from megatron.model.fused_bias_gelu import bias_gelu_impl
-from megatron.model.hyena_standalone import ParallelHyena
+from megatron.model.hyena import ParallelHyena
 from megatron.model.utils import attention_mask_func, openai_gelu, erf_gelu
 
 import deepspeed
@@ -163,6 +163,8 @@ class ParallelAttention(MegatronModule):
         self.layer_number = max(1, layer_number)
         self.attention_type = attention_type
         self.attn_mask_type = attn_mask_type
+        self.use_hyena = args.use_hyena
+        assert not self.use_hyena or attn_mask_type is AttnMaskType.causal
 
         projection_size = args.kv_channels * args.num_attention_heads
 
@@ -202,18 +204,25 @@ class ParallelAttention(MegatronModule):
             coeff = self.layer_number
             self.norm_factor *= coeff
 
-        self.scale_mask_softmax = FusedScaleMaskSoftmax(
-            self.fp16, self.bf16,
-            self.attn_mask_type,
-            args.masked_softmax_fusion,
-            attention_mask_func,
-            self.attention_softmax_in_fp32,
-            coeff)
+        if self.use_hyena:
+            self.mixer = ParallelHyena(
+                init_method,
+                attention_type=attention_type,
+                attn_mask_type=self.attn_mask_type,
+            )
+        else:
+            self.scale_mask_softmax = FusedScaleMaskSoftmax(
+                self.fp16, self.bf16,
+                self.attn_mask_type,
+                args.masked_softmax_fusion,
+                attention_mask_func,
+                self.attention_softmax_in_fp32,
+                coeff)
 
-        # Dropout. Note that for a single iteration, this layer will generate
-        # different outputs on different number of parallel partitions but
-        # on average it should not be partition dependent.
-        self.attention_dropout = torch.nn.Dropout(args.attention_dropout)
+            # Dropout. Note that for a single iteration, this layer will generate
+            # different outputs on different number of parallel partitions but
+            # on average it should not be partition dependent.
+            self.attention_dropout = torch.nn.Dropout(args.attention_dropout)
 
         # Output.
         self.dense = mpu.RowParallelLinear(
@@ -341,7 +350,9 @@ class ParallelAttention(MegatronModule):
                 query_layer, key_layer, cos, sin, scale, offset=offset)
 
         # Raw attention scores. [b * np, sq, sk]
-        if alibi is None:
+        if self.use_hyena:
+            pass
+        elif alibi is None:
             matmul_result = torch.baddbmm(
                 matmul_result,
                 query_layer.transpose(0, 1),   # [b * np, sq, hn]
@@ -363,65 +374,68 @@ class ParallelAttention(MegatronModule):
                 key_layer.transpose(0, 1).transpose(1, 2),  # [b * np, hn, sk]
                 beta=beta, alpha=(1.0 / self.norm_factor))
 
-        # change view to [b, np, sq, sk]
-        attention_scores = matmul_result.view(*output_size)
-        # ==================================================
-        # Update attention mask for inference. [b, np, sq, sk]
-        # ==================================================
+        if self.use_hyena:
+            context_layer = self.mixer(query_layer, key_layer, value_layer)
+        else:
+            # change view to [b, np, sq, sk]
+            attention_scores = matmul_result.view(*output_size)
+            # ==================================================
+            # Update attention mask for inference. [b, np, sq, sk]
+            # ==================================================
 
-        if get_key_value:
-            with torch.no_grad():
-                # TODO @thomasw21 Handle case where `attention_mask` is None
-                if layer_past is not None:
-                    attention_mask = attention_mask[
-                        ...,
-                        attention_scores.size(3) - 1,
-                        :attention_scores.size(3)].unsqueeze(2)
-                else:
-                    attention_mask = attention_mask[
-                        ...,
-                        :attention_scores.size(3),
-                        :attention_scores.size(3)]
+            if get_key_value:
+                with torch.no_grad():
+                    # TODO @thomasw21 Handle case where `attention_mask` is None
+                    if layer_past is not None:
+                        attention_mask = attention_mask[
+                            ...,
+                            attention_scores.size(3) - 1,
+                            :attention_scores.size(3)].unsqueeze(2)
+                    else:
+                        attention_mask = attention_mask[
+                            ...,
+                            :attention_scores.size(3),
+                            :attention_scores.size(3)]
 
-        # ===========================
-        # Attention probs and dropout
-        # ===========================
+            # ===========================
+            # Attention probs and dropout
+            # ===========================
 
-        # attention scores and attention mask [b, np, sq, sk]
-        attention_probs = self.scale_mask_softmax(attention_scores,
-                                                  attention_mask)
+            # attention scores and attention mask [b, np, sq, sk]
+            attention_probs = self.scale_mask_softmax(attention_scores,
+                                                      attention_mask)
 
-        # This is actually dropping out entire tokens to attend to, which might
-        # seem a bit unusual, but is taken from the original Transformer paper.
-        with mpu.get_cuda_rng_tracker().fork():
-            attention_probs = self.attention_dropout(attention_probs)
+            # This is actually dropping out entire tokens to attend to, which might
+            # seem a bit unusual, but is taken from the original Transformer paper.
+            with mpu.get_cuda_rng_tracker().fork():
+                attention_probs = self.attention_dropout(attention_probs)
 
-        # =========================
-        # Context layer. [sq, b, hp]
-        # =========================
+            # =========================
+            # Context layer. [sq, b, hp]
+            # =========================
 
-        # value_layer -> context layer.
-        # [sk, b, np, hn] --> [b, np, sq, hn]
+            # value_layer -> context layer.
+            # [sk, b, np, hn] --> [b, np, sq, hn]
 
-        # context layer shape: [b, np, sq, hn]
-        output_size = (value_layer.size(1),
-                       value_layer.size(2),
-                       query_layer.size(0),
-                       value_layer.size(3))
+            # context layer shape: [b, np, sq, hn]
+            output_size = (value_layer.size(1),
+                           value_layer.size(2),
+                           query_layer.size(0),
+                           value_layer.size(3))
 
-        # change view [sk, b * np, hn]
-        value_layer = value_layer.view(value_layer.size(0),
-                                       output_size[0] * output_size[1], -1)
+            # change view [sk, b * np, hn]
+            value_layer = value_layer.view(value_layer.size(0),
+                                           output_size[0] * output_size[1], -1)
 
-        # change view [b * np, sq, sk]
-        attention_probs = attention_probs.view(output_size[0] * output_size[1],
-                                               output_size[2], -1)
+            # change view [b * np, sq, sk]
+            attention_probs = attention_probs.view(output_size[0] * output_size[1],
+                                                   output_size[2], -1)
 
-        # matmul: [b * np, sq, hn]
-        context_layer = torch.bmm(attention_probs, value_layer.transpose(0, 1))
+            # matmul: [b * np, sq, hn]
+            context_layer = torch.bmm(attention_probs, value_layer.transpose(0, 1))
 
-        # change view [b, np, sq, hn]
-        context_layer = context_layer.view(*output_size)
+            # change view [b, np, sq, hn]
+            context_layer = context_layer.view(*output_size)
 
         # [b, np, sq, hn] --> [sq, b, np, hn]
         context_layer = context_layer.permute(2, 0, 1, 3).contiguous()
@@ -498,21 +512,12 @@ class ParallelTransformerLayer(MegatronModule):
             eps=args.layernorm_epsilon)
 
         # Self attention.
-        if args.use_hyena and self_attn_mask_type is AttnMaskType.causal:
-            self.self_attention = ParallelHyena(
-                init_method,
-                output_layer_init_method,
-                layer_number,
-                attention_type=AttnType.self_attn,
-                attn_mask_type=self_attn_mask_type,
-            )
-        else:
-            self.self_attention = ParallelAttention(
-                init_method,
-                output_layer_init_method,
-                layer_number,
-                attention_type=AttnType.self_attn,
-                attn_mask_type=self_attn_mask_type)
+        self.self_attention = ParallelAttention(
+            init_method,
+            output_layer_init_method,
+            layer_number,
+            attention_type=AttnType.self_attn,
+            attn_mask_type=self_attn_mask_type)
         self.hidden_dropout = args.hidden_dropout
         self.bias_dropout_fusion = args.bias_dropout_fusion
 
